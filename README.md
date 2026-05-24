@@ -73,6 +73,37 @@ Walks you through seven steps:
 
 ---
 
+## Menu-bar app (macOS native)
+
+Run the wizard from a persistent menu-bar icon — no Terminal window needed.
+
+### Install via pipx
+
+```bash
+pipx install 'mediahub-setup[menubar]'
+mediahub-setup-menubar
+```
+
+The icon appears in your menu bar. Click **Open MediaHub Setup…** to open
+the browser. The wizard server keeps running in the background; click **Quit
+MediaHub Setup** when you're done.
+
+### Install as a standalone .app
+
+Download `MediaHub Setup.dmg` from the
+[latest GitHub Release](https://github.com/dhouchin/mediahub-setup/releases),
+open it, and drag to Applications.  
+Or build it yourself:
+
+```bash
+pip install 'mediahub-setup[menubar]' py2app
+cd packaging/py2app
+python build_app.py py2app
+open 'dist/MediaHub Setup.app'
+```
+
+---
+
 ## What it doesn't do (yet)
 
 - Linux / Windows support (macOS-first; Linux next)

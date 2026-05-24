@@ -34,9 +34,14 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.5",
 ]
+menubar = [
+    # macOS only — install with: pip install 'mediahub-setup[menubar]'
+    "rumps>=0.4",
+]
 
 [project.scripts]
 mediahub-setup = "mediahub_setup.cli:main"
+mediahub-setup-menubar = "mediahub_setup.menubar:main"
 
 [project.urls]
 Homepage = "https://github.com/dhouchin/mediahub-setup"

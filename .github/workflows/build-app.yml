@@ -1,0 +1,59 @@
+name: Build macOS App
+
+# Builds MediaHub Setup.app and attaches a DMG to each GitHub Release.
+# Triggered alongside the publish.yml workflow.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:   # allow manual trigger for testing
+
+permissions:
+  contents: write  # needed to upload release assets
+
+jobs:
+  build:
+    name: Build .app bundle
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install 'mediahub-setup[menubar]' py2app
+          pip install -e '.'
+
+      - name: Build .app
+        working-directory: packaging/py2app
+        run: python build_app.py py2app
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Build DMG
+        working-directory: packaging/py2app
+        run: |
+          create-dmg \
+            --volname "MediaHub Setup" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 128 \
+            --icon "MediaHub Setup.app" 150 190 \
+            --app-drop-link 450 190 \
+            --no-internet-enable \
+            "MediaHub Setup.dmg" \
+            "dist/MediaHub Setup.app"
+
+      - name: Upload DMG to release
+        if: github.event_name == 'release'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            "packaging/py2app/MediaHub Setup.dmg" \
+            --clobber

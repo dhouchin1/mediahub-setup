@@ -19,6 +19,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Auto-generated shared password (16 chars, no ambiguous characters)
 - `docker-compose.yml` template using TRaSH Guides single-mount convention
 - `scripts/install.sh` one-liner curl installer
+- `mediahub_setup/menubar.py`: native macOS menu-bar wrapper (`rumps`) with
+  health-polling timer, browser-open action, and graceful Quit
+- `mediahub-setup-menubar` CLI entry point (`pip install 'mediahub-setup[menubar]'`)
+- `packaging/py2app/`: build script + bootstrap for standalone `.app` bundle
+- `.github/workflows/build-app.yml`: builds and uploads DMG on each release
 - GitHub Actions CI (Python 3.12 + 3.13, macOS runner) and PyPI publish
   workflow (OIDC trusted publishing)
 - Homebrew formula template in `packaging/homebrew/`
