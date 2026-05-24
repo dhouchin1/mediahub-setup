@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}Settings — MediaHub Setup{% endblock %}
+
+{% block content %}
+<div class="glass rounded-3xl p-8 sm:p-10 shadow-2xl"
+     x-data="{
+       portsOpen: false,
+       autoPasswords: {{ 'true' if auto_passwords else 'false' }},
+       sharedPassword: '{{ shared_password | default('') }}',
+       async copyPassword() {
+         try {
+           await navigator.clipboard.writeText(this.sharedPassword);
+           this.copied = true;
+           setTimeout(() => { this.copied = false; }, 1800);
+         } catch (e) {}
+       },
+       copied: false
+     }">
+
+  <div class="mb-8">
+    <h1 class="text-3xl font-bold mb-2">Settings</h1>
+    <p class="text-slate-400">
+      Configure your stack before we install anything.
+    </p>
+  </div>
+
+  <form method="post" action="{{ url_for('settings.submit') }}" class="space-y-7">
+
+    <!-- Timezone -->
+    <div>
+      <label for="tz" class="text-sm font-medium text-slate-300 mb-1 block">
+        Timezone
+      </label>
+      <div class="flex gap-2 items-start">
+        <div class="flex-1">
+          <input
+            id="tz"
+            name="tz"
+            type="text"
+            value="{{ tz }}"
+            placeholder="America/Detroit"
+            class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 focus:border-violet-500 focus:ring-1 focus:ring-violet-500 w-full {% if errors.tz %}border-rose-500{% endif %}"
+          />
+          {% if errors.tz %}
+            <p class="text-rose-300 text-xs mt-1">{{ errors.tz }}</p>
+          {% endif %}
+        </div>
+        <a href="https://en.wikipedia.org/wiki/List_of_tz_database_time_zones"
+           target="_blank" rel="noopener"
+           class="text-xs text-violet-400 hover:text-violet-200 transition mt-2.5 whitespace-nowrap">
+          TZ list ↗
+        </a>
+      </div>
+      <p class="text-xs text-slate-500 mt-1">Auto-detected from your system. Used by all containers.</p>
+    </div>
+
+    <!-- PUID / PGID -->
+    <div class="grid sm:grid-cols-2 gap-4">
+      <div>
+        <label for="puid" class="text-sm font-medium text-slate-300 mb-1 block">
+          PUID <span class="font-normal text-slate-500">(user ID)</span>
+        </label>
+        <input
+          id="puid"
+          name="puid"
+          type="number"
+          min="1"
+          value="{{ puid }}"
+          class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 focus:border-violet-500 focus:ring-1 focus:ring-violet-500 w-full {% if errors.puid %}border-rose-500{% endif %}"
+        />
+        {% if errors.puid %}
+          <p class="text-rose-300 text-xs mt-1">{{ errors.puid }}</p>
+        {% endif %}
+      </div>
+      <div>
+        <label for="pgid" class="text-sm font-medium text-slate-300 mb-1 block">
+          PGID <span class="font-normal text-slate-500">(group ID)</span>
+        </label>
+        <input
+          id="pgid"
+          name="pgid"
+          type="number"
+          min="1"
+          value="{{ pgid }}"
+          class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 focus:border-violet-500 focus:ring-1 focus:ring-violet-500 w-full {% if errors.pgid %}border-rose-500{% endif %}"
+        />
+        {% if errors.pgid %}
+          <p class="text-rose-300 text-xs mt-1">{{ errors.pgid }}</p>
+        {% endif %}
+      </div>
+    </div>
+    <p class="text-xs text-slate-500 -mt-4">
+      Run <code class="text-slate-300 bg-slate-800 px-1 rounded">id</code> in Terminal if you're unsure. These match your current user.
+    </p>
+
+    <!-- Auto-generate password toggle -->
+    <div class="rounded-xl p-5 bg-slate-900/40 border border-slate-700/50 space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium text-slate-200">Auto-generate passwords</p>
+          <p class="text-xs text-slate-400 mt-0.5">One shared password for all four services.</p>
+        </div>
+        <!-- Toggle switch -->
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" name="auto_passwords" id="auto_passwords"
+                 value="on"
+                 class="sr-only peer"
+                 x-model="autoPasswords"
+                 {% if auto_passwords %}checked{% endif %}
+          />
+          <div class="w-11 h-6 bg-slate-700 peer-focus:ring-2 peer-focus:ring-violet-500 rounded-full peer
+                      peer-checked:after:translate-x-full peer-checked:after:border-white
+                      after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                      after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all
+                      peer-checked:bg-violet-500"></div>
+        </label>
+      </div>
+
+      <!-- Password display (visible when auto_passwords ON) -->
+      <div x-show="autoPasswords" x-cloak class="space-y-2">
+        <label class="text-sm font-medium text-slate-300 mb-1 block">Shared password</label>
+        <div class="flex gap-2">
+          <input
+            type="text"
+            name="shared_password"
+            id="shared_password"
+            x-model="sharedPassword"
+            class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 font-mono text-sm focus:border-violet-500 focus:ring-1 focus:ring-violet-500 flex-1"
+            readonly
+          />
+          <button
+            type="button"
+            @click="copyPassword()"
+            class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition flex items-center gap-1.5"
+          >
+            <svg x-show="!copied" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3"/>
+            </svg>
+            <svg x-show="copied" class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            <span x-text="copied ? 'Copied!' : 'Copy'"></span>
+          </button>
+        </div>
+        <p class="text-xs text-slate-500">
+          Save this somewhere safe. You'll use it to log into each service on first launch.
+        </p>
+      </div>
+
+      <!-- Off-state hint -->
+      <p x-show="!autoPasswords" x-cloak class="text-xs text-slate-400">
+        You'll set passwords manually when you first log into each service.
+      </p>
+    </div>
+
+    <!-- Port overrides (collapsible) -->
+    <div class="rounded-xl border border-slate-700/50 overflow-hidden">
+      <button type="button"
+              @click="portsOpen = !portsOpen"
+              class="w-full flex items-center justify-between px-5 py-4 bg-slate-900/40 hover:bg-slate-900/60 transition text-left">
+        <div>
+          <span class="text-sm font-medium text-slate-200">Port overrides</span>
+          <span class="text-xs text-slate-500 ml-2">optional</span>
+        </div>
+        <svg class="w-4 h-4 text-slate-400 transition-transform"
+             :class="portsOpen ? 'rotate-180' : ''"
+             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+
+      <div x-show="portsOpen" x-cloak class="px-5 py-5 bg-slate-900/20 space-y-4">
+        <p class="text-xs text-slate-400">
+          Only change these if the defaults conflict with software already running on this Mac.
+        </p>
+
+        {% set port_fields = [
+          ("sonarr",          "Sonarr (TV)",            ports.sonarr         if ports is defined else 8989),
+          ("radarr",          "Radarr (Movies)",         ports.radarr         if ports is defined else 7878),
+          ("prowlarr",        "Prowlarr (Indexers)",     ports.prowlarr       if ports is defined else 9696),
+          ("qbittorrent_web", "qBittorrent Web UI",      ports.qbittorrent_web if ports is defined else 8080),
+          ("qbittorrent_bt",  "qBittorrent BT",          ports.qbittorrent_bt  if ports is defined else 6881),
+        ] %}
+
+        <div class="grid sm:grid-cols-2 gap-4">
+          {% for svc, label, default_port in port_fields %}
+          <div>
+            <label for="port_{{ svc }}" class="text-sm font-medium text-slate-300 mb-1 block">
+              {{ label }}
+            </label>
+            <input
+              id="port_{{ svc }}"
+              name="port_{{ svc }}"
+              type="number"
+              min="1024"
+              max="65535"
+              placeholder="{{ default_port }}"
+              value="{{ ports[svc] if ports is defined and ports[svc] != default_port else '' }}"
+              class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 focus:border-violet-500 focus:ring-1 focus:ring-violet-500 w-full {% if errors['port_' ~ svc] %}border-rose-500{% endif %}"
+            />
+            {% if errors['port_' ~ svc] %}
+              <p class="text-rose-300 text-xs mt-1">{{ errors['port_' ~ svc] }}</p>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation -->
+    <div class="flex items-center justify-between pt-2">
+      <a href="{{ url_for('drive.index') }}"
+         class="text-sm text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+        </svg>
+        Back
+      </a>
+      <button type="submit"
+              class="inline-flex items-center gap-2 px-7 py-3 rounded-xl bg-gradient-to-r from-violet-500 to-pink-500 text-white font-medium shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 hover:scale-[1.02] transition transform">
+        Continue to Install
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+        </svg>
+      </button>
+    </div>
+
+  </form>
+</div>
+{% endblock %}

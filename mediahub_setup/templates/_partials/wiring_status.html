@@ -1,0 +1,139 @@
+{% set all_done = (phase == 'complete') %}
+{% set any_failed = (phase == 'failed') %}
+{% set is_running = (phase == 'running') %}
+{% set is_idle = (phase == 'idle') %}
+
+<div id="wiring-status"
+  {% if is_running %}
+  hx-get="{{ url_for('wiring.poll_status') }}"
+  hx-trigger="every 1s"
+  hx-target="#wiring-status"
+  hx-swap="outerHTML"
+  {% endif %}>
+
+  <!-- Task list -->
+  <ul class="space-y-2 mb-6">
+    {% if is_idle %}
+      <!-- Ready state: show greyed-out checklist of what will happen -->
+      {% for name in task_names %}
+      <li class="flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-700/40 bg-slate-800/30">
+        <span class="flex-shrink-0 w-5 h-5 rounded-full border border-slate-600 flex items-center justify-center text-slate-500 text-xs">
+          ○
+        </span>
+        <span class="text-sm text-slate-400">{{ name }}</span>
+      </li>
+      {% endfor %}
+    {% else %}
+      <!-- Live / completed state: show real task statuses -->
+      {% for task in tasks %}
+      <li class="flex items-center gap-3 px-4 py-3 rounded-xl border transition
+        {% if task.status == 'ok' %}border-emerald-500/30 bg-emerald-500/5
+        {% elif task.status == 'failed' %}border-rose-500/30 bg-rose-500/5
+        {% elif task.status == 'running' %}border-violet-500/30 bg-violet-500/5
+        {% elif task.status == 'skipped' %}border-slate-700/20 bg-slate-800/20
+        {% else %}border-slate-700/40 bg-slate-800/30{% endif %}">
+
+        <!-- Icon -->
+        <span class="flex-shrink-0 w-5 h-5 flex items-center justify-center">
+          {% if task.status == 'ok' %}
+            <span class="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-300 text-xs font-bold">✓</span>
+          {% elif task.status == 'failed' %}
+            <span class="w-5 h-5 rounded-full bg-rose-500/20 flex items-center justify-center text-rose-300 text-xs font-bold">✗</span>
+          {% elif task.status == 'running' %}
+            <svg class="animate-spin w-4 h-4 text-violet-300" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+          {% elif task.status == 'skipped' %}
+            <span class="w-5 h-5 rounded-full bg-slate-700/40 flex items-center justify-center text-slate-500 text-xs">—</span>
+          {% else %}
+            <span class="w-5 h-5 rounded-full border border-slate-600 flex items-center justify-center text-slate-500 text-xs">○</span>
+          {% endif %}
+        </span>
+
+        <!-- Name + message -->
+        <div class="flex-1 min-w-0">
+          <span class="text-sm
+            {% if task.status == 'ok' %}text-slate-200
+            {% elif task.status == 'failed' %}text-rose-200
+            {% elif task.status == 'running' %}text-violet-200 font-medium
+            {% elif task.status == 'skipped' %}text-slate-600
+            {% else %}text-slate-400{% endif %}">
+            {{ task.name }}
+          </span>
+          {% if task.message %}
+            <span class="ml-2 text-xs
+              {% if task.status == 'failed' %}text-rose-400{% else %}text-slate-500{% endif %}">
+              — {{ task.message }}
+            </span>
+          {% endif %}
+        </div>
+
+        <!-- Right-side status text -->
+        <span class="flex-shrink-0 text-xs
+          {% if task.status == 'ok' %}text-emerald-400
+          {% elif task.status == 'failed' %}text-rose-400
+          {% elif task.status == 'running' %}text-violet-300
+          {% elif task.status == 'skipped' %}text-slate-600
+          {% else %}text-slate-500{% endif %}">
+          {{ task.status }}
+        </span>
+      </li>
+      {% endfor %}
+    {% endif %}
+  </ul>
+
+  <!-- Bottom bar -->
+  <div class="flex items-center justify-between pt-4 border-t border-slate-700/50">
+    <a href="{{ url_for('install.index') }}"
+       class="px-4 py-2 text-sm rounded-lg text-slate-400 hover:text-slate-200 transition">
+      Back
+    </a>
+
+    <div class="flex items-center gap-3">
+      {% if is_idle %}
+        <!-- Ready: show Start button -->
+        <button id="start-btn"
+                hx-post="{{ url_for('wiring.start') }}"
+                hx-target="#wiring-status"
+                hx-swap="outerHTML"
+                class="inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium bg-gradient-to-r from-violet-500 to-pink-500 text-white shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 transition">
+          Start wiring
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          </svg>
+        </button>
+
+      {% elif is_running %}
+        <!-- Running: disabled Continue -->
+        <button disabled
+                class="inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium bg-slate-800 text-slate-500 cursor-not-allowed">
+          Wiring in progress…
+        </button>
+
+      {% elif all_done %}
+        <!-- Done: enabled Continue -->
+        <a href="{{ url_for('done.index') }}"
+           class="inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium bg-gradient-to-r from-violet-500 to-pink-500 text-white shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 transition">
+          Continue
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+          </svg>
+        </a>
+
+      {% elif any_failed %}
+        <!-- Failed: Retry -->
+        <button hx-post="{{ url_for('wiring.start') }}"
+                hx-target="#wiring-status"
+                hx-swap="outerHTML"
+                class="inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium bg-gradient-to-r from-violet-500 to-pink-500 text-white shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 transition">
+          Retry
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+        </button>
+      {% endif %}
+    </div>
+  </div>
+</div>

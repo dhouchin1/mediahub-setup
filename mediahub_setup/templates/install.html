@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Install — MediaHub Setup{% endblock %}
+
+{% block content %}
+<div class="glass rounded-3xl p-8 sm:p-10 shadow-2xl">
+
+  <div class="mb-8">
+    <h1 class="text-3xl font-bold mb-2">Install</h1>
+    <p class="text-slate-400">
+      We'll create the folder layout, write the compose file, and bring the stack up.
+    </p>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+      <div class="mb-4 px-4 py-3 rounded-xl text-sm
+        {% if category == 'warn' %}bg-amber-500/10 border border-amber-500/30 text-amber-300
+        {% else %}bg-rose-500/10 border border-rose-500/30 text-rose-300{% endif %}">
+        {{ message }}
+      </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  {% if status.status == 'idle' %}
+  <!-- ── Pre-flight summary ─────────────────────────────────────────────── -->
+  <div class="space-y-4 mb-8">
+
+    <div class="rounded-2xl border border-slate-700/50 bg-slate-900/40 p-5">
+      <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-3">What will be created</div>
+      <ul class="space-y-2 text-sm text-slate-300">
+        <li class="flex items-start gap-2">
+          <span class="mt-0.5 w-4 h-4 rounded-full bg-violet-500/20 text-violet-300 text-[10px] flex items-center justify-center flex-shrink-0">D</span>
+          <span>
+            <span class="text-slate-100 font-medium">{{ install_dir }}</span>
+            <span class="text-slate-400"> — compose file &amp; config</span>
+          </span>
+        </li>
+        <li class="flex items-start gap-2">
+          <span class="mt-0.5 w-4 h-4 rounded-full bg-violet-500/20 text-violet-300 text-[10px] flex items-center justify-center flex-shrink-0">D</span>
+          <span>
+            <span class="text-slate-100 font-medium">{{ drive.mount }}/media/</span>
+            <span class="text-slate-400"> — movies &amp; TV folders</span>
+          </span>
+        </li>
+        <li class="flex items-start gap-2">
+          <span class="mt-0.5 w-4 h-4 rounded-full bg-violet-500/20 text-violet-300 text-[10px] flex items-center justify-center flex-shrink-0">D</span>
+          <span>
+            <span class="text-slate-100 font-medium">{{ drive.mount }}/torrents/</span>
+            <span class="text-slate-400"> — download staging folders</span>
+          </span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="rounded-2xl border border-slate-700/50 bg-slate-900/40 p-5">
+      <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-3">Containers</div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {% for svc in services %}
+        <div class="rounded-xl bg-slate-800/60 px-3 py-2 text-center">
+          <div class="text-sm font-medium text-slate-100">{{ svc.label }}</div>
+          <div class="text-xs text-slate-400">:{{ settings.ports[svc.port_key] }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="rounded-2xl border border-slate-700/50 bg-slate-900/40 p-5">
+      <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-3">Settings</div>
+      <dl class="grid grid-cols-2 sm:grid-cols-3 gap-y-2 gap-x-6 text-sm">
+        <div>
+          <dt class="text-slate-500 text-xs">Timezone</dt>
+          <dd class="text-slate-200">{{ settings.tz }}</dd>
+        </div>
+        <div>
+          <dt class="text-slate-500 text-xs">PUID / PGID</dt>
+          <dd class="text-slate-200">{{ settings.puid }} / {{ settings.pgid }}</dd>
+        </div>
+        <div>
+          <dt class="text-slate-500 text-xs">Drive</dt>
+          <dd class="text-slate-200 truncate">{{ drive.mount }}</dd>
+        </div>
+      </dl>
+    </div>
+  </div>
+
+  <!-- Start button -->
+  <div class="flex items-center justify-between pt-4 border-t border-slate-700/50">
+    <a href="{{ url_for('settings.index') }}"
+       class="px-4 py-2 text-sm rounded-lg text-slate-400 hover:text-slate-200 transition">
+      Back
+    </a>
+    <form method="post" action="{{ url_for('install.start') }}">
+      <button type="submit"
+              class="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium bg-gradient-to-r from-violet-500 to-pink-500 text-white shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 transition">
+        Start install
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+        </svg>
+      </button>
+    </form>
+  </div>
+
+  {% else %}
+  <!-- ── In-progress / complete view ───────────────────────────────────── -->
+  <div id="install-status-root"
+       hx-get="{{ url_for('install.status') }}"
+       hx-trigger="{% if status.status in ('running',) %}every 1s{% else %}none{% endif %}"
+       hx-swap="outerHTML">
+    {% include "_partials/install_status.html" with context %}
+  </div>
+
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // When HTMX swaps in a completed partial, stop polling by removing the trigger.
+  document.addEventListener("htmx:afterSwap", function(evt) {
+    var el = evt.detail.target;
+    if (el && el.id === "install-status-root") {
+      var status = el.dataset.installStatus;
+      if (status && status !== "running") {
+        el.removeAttribute("hx-trigger");
+        htmx.process(el);
+      }
+    }
+  });
+</script>
+{% endblock %}

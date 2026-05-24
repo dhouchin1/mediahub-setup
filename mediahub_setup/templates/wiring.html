@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Wire-up — MediaHub Setup{% endblock %}
+
+{% block content %}
+<div class="glass rounded-3xl p-8 sm:p-10 shadow-2xl">
+  <div class="flex items-start justify-between mb-6 gap-4">
+    <div>
+      <h1 class="text-3xl font-bold mb-2">Wire-up</h1>
+      <p class="text-slate-400">
+        Auto-configure Sonarr, Radarr, Prowlarr, and qBittorrent so they all talk to each other.
+        No clicking through five web UIs.
+      </p>
+    </div>
+  </div>
+
+  <!-- Status area — HTMX target -->
+  <div id="wiring-status">
+    {% include "_partials/wiring_status.html" %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    // After Start is clicked the partial sets up its own HTMX polling,
+    // but we also wire up the button here to POST /wiring/start.
+    const btn = document.getElementById("start-btn");
+    if (btn) {
+      btn.addEventListener("click", function () {
+        btn.disabled = true;
+        btn.textContent = "Starting…";
+        fetch("{{ url_for('wiring.start') }}", { method: "POST" })
+          .then(() => {
+            // Trigger HTMX polling by swapping in a fresh partial
+            htmx.trigger("#wiring-status", "poll");
+          })
+          .catch(() => {
+            btn.disabled = false;
+            btn.textContent = "Start wiring";
+          });
+      });
+    }
+  })();
+</script>
+{% endblock %}

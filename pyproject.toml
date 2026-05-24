@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mediahub-setup"
+version = "0.1.0"
+description = "Web-wizard installer for a self-hosted Sonarr+Radarr+Prowlarr+qBittorrent media stack"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "Dan Houchin" }]
+keywords = ["sonarr", "radarr", "prowlarr", "qbittorrent", "self-hosted", "installer", "wizard"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Web Environment",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "flask>=3.0",
+    "waitress>=3.0",
+    "click>=8.1",
+    "requests>=2.31",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+mediahub-setup = "mediahub_setup.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/dhouchin/mediahub-setup"
+Issues = "https://github.com/dhouchin/mediahub-setup/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mediahub_setup"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]

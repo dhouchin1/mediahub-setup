@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Preflight — MediaHub Setup{% endblock %}
+
+{% block content %}
+<div class="glass rounded-3xl p-8 sm:p-10 shadow-2xl">
+  <div class="flex items-start justify-between mb-6 gap-4">
+    <div>
+      <h1 class="text-3xl font-bold mb-2">Preflight checks</h1>
+      <p class="text-slate-400">
+        Making sure your system has everything we need before we install anything.
+      </p>
+    </div>
+    <button hx-post="{{ url_for('preflight.rerun') }}"
+            hx-target="#preflight-results"
+            hx-swap="outerHTML"
+            hx-indicator="#rerun-spinner"
+            class="flex-shrink-0 inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
+      <svg id="rerun-spinner" class="htmx-indicator animate-spin w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" stroke-width="3" stroke-dasharray="50 50" />
+      </svg>
+      <span>Re-run</span>
+    </button>
+  </div>
+
+  {% include "_partials/preflight_results.html" %}
+</div>
+{% endblock %}

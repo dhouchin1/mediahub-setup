@@ -1,0 +1,77 @@
+<div id="preflight-results">
+  <ul class="space-y-3 mb-6">
+    {% for r in results %}
+    <li class="rounded-xl border p-4 transition
+      {% if r.status == 'pass' %}border-emerald-500/30 bg-emerald-500/5
+      {% elif r.status == 'warn' %}border-amber-500/30 bg-amber-500/5
+      {% else %}border-rose-500/30 bg-rose-500/5{% endif %}"
+      x-data="{ open: false }">
+      <div class="flex items-start gap-3">
+        <!-- status icon -->
+        <div class="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold mt-0.5
+          {% if r.status == 'pass' %}bg-emerald-500/20 text-emerald-300
+          {% elif r.status == 'warn' %}bg-amber-500/20 text-amber-300
+          {% else %}bg-rose-500/20 text-rose-300{% endif %}">
+          {% if r.status == 'pass' %}✓{% elif r.status == 'warn' %}!{% else %}✗{% endif %}
+        </div>
+
+        <div class="flex-1 min-w-0">
+          <div class="flex items-baseline gap-2 flex-wrap">
+            <div class="font-medium text-slate-100">{{ r.name }}</div>
+            <div class="text-sm text-slate-400">{{ r.message }}</div>
+          </div>
+
+          {% if r.details %}
+          <ul class="mt-2 text-xs text-slate-400 font-mono space-y-0.5">
+            {% for line in r.details %}<li>· {{ line }}</li>{% endfor %}
+          </ul>
+          {% endif %}
+
+          {% if r.fix %}
+          <button @click="open = !open" class="mt-2 text-xs text-violet-300 hover:text-violet-200 inline-flex items-center gap-1">
+            <span x-text="open ? 'Hide fix' : 'How to fix'"></span>
+            <svg class="w-3 h-3 transition" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div x-show="open" x-transition class="mt-2 text-sm text-slate-300 bg-slate-900/60 rounded-lg p-3 border border-slate-700/50">
+            {{ r.fix }}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+
+  <!-- Overall result + nav -->
+  <div class="flex items-center justify-between pt-4 border-t border-slate-700/50">
+    <div class="text-sm">
+      {% if overall == 'pass' %}
+        <span class="text-emerald-300 font-medium">All checks passed.</span>
+        <span class="text-slate-400">You're ready to continue.</span>
+      {% elif overall == 'warn' %}
+        <span class="text-amber-300 font-medium">Some warnings.</span>
+        <span class="text-slate-400">You can proceed but read the fixes first.</span>
+      {% else %}
+        <span class="text-rose-300 font-medium">Blocking issues.</span>
+        <span class="text-slate-400">Fix them and re-run before continuing.</span>
+      {% endif %}
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="{{ url_for('welcome.index') }}"
+         class="px-4 py-2 text-sm rounded-lg text-slate-400 hover:text-slate-200 transition">
+        Back
+      </a>
+      <a href="{{ url_for('drive.index') }}"
+         class="inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium transition
+           {% if overall == 'fail' %}bg-slate-800 text-slate-500 cursor-not-allowed pointer-events-none
+           {% else %}bg-gradient-to-r from-violet-500 to-pink-500 text-white shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50{% endif %}">
+        Continue
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+        </svg>
+      </a>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}Done — MediaHub Setup{% endblock %}
+
+{% block content %}
+<div class="glass rounded-3xl p-8 sm:p-12 shadow-2xl space-y-10">
+
+  <!-- Hero -->
+  <div class="text-center">
+    <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-violet-500 to-pink-500 shadow-lg shadow-violet-500/40 mb-6">
+      <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+      </svg>
+    </div>
+    <h1 class="text-4xl sm:text-5xl font-bold tracking-tight mb-3">
+      <span class="bg-gradient-to-r from-violet-400 to-pink-400 bg-clip-text text-transparent">You're all set!</span>
+    </h1>
+    <p class="text-slate-300 text-lg max-w-xl mx-auto">
+      Your media stack is running and fully wired. Here's everything you need to get started.
+    </p>
+  </div>
+
+  <!-- Service cards -->
+  <div>
+    <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-4">Your services</h2>
+    <div class="grid sm:grid-cols-2 gap-4">
+      {% for svc in services %}
+      <div class="rounded-xl p-5 bg-slate-900/40 border border-slate-700/50 space-y-3"
+           x-data="{ revealed: false, copied: false }">
+        <!-- Name + badge -->
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0
+            {% if svc.color == 'blue' %}bg-blue-500/20 text-blue-300 border border-blue-500/30
+            {% elif svc.color == 'amber' %}bg-amber-500/20 text-amber-300 border border-amber-500/30
+            {% elif svc.color == 'violet' %}bg-violet-500/20 text-violet-300 border border-violet-500/30
+            {% else %}bg-cyan-500/20 text-cyan-300 border border-cyan-500/30{% endif %}">
+            {{ svc.name[0] }}
+          </div>
+          <div>
+            <div class="font-semibold text-sm">{{ svc.name }}</div>
+            <div class="text-xs text-slate-400">{{ svc.role }}</div>
+          </div>
+        </div>
+
+        <!-- URL -->
+        <div>
+          <div class="text-xs text-slate-500 mb-1">URL</div>
+          <a href="{{ svc.url }}" target="_blank" rel="noopener"
+             class="text-sm font-mono
+               {% if svc.color == 'blue' %}text-blue-300 hover:text-blue-200
+               {% elif svc.color == 'amber' %}text-amber-300 hover:text-amber-200
+               {% elif svc.color == 'violet' %}text-violet-300 hover:text-violet-200
+               {% else %}text-cyan-300 hover:text-cyan-200{% endif %}
+               underline underline-offset-2 transition break-all">
+            {{ svc.url }}
+          </a>
+        </div>
+
+        <!-- Username (only for services that have one) -->
+        {% if svc.username %}
+        <div>
+          <div class="text-xs text-slate-500 mb-1">Username</div>
+          <div class="text-sm font-mono text-slate-200">{{ svc.username }}</div>
+        </div>
+        {% endif %}
+
+        <!-- Password -->
+        {% if svc.password %}
+        <div>
+          <div class="text-xs text-slate-500 mb-1">Password</div>
+          <div class="flex items-center gap-2">
+            <div class="text-sm font-mono text-slate-200 flex-1 min-w-0 truncate"
+                 x-text="revealed ? '{{ svc.password }}' : '••••••••••••'"></div>
+            <button @click="revealed = !revealed"
+                    class="text-xs text-slate-400 hover:text-slate-200 transition flex-shrink-0"
+                    x-text="revealed ? 'Hide' : 'Reveal'"></button>
+            <button @click="navigator.clipboard.writeText('{{ svc.password }}').then(() => { copied = true; setTimeout(() => copied = false, 1500) })"
+                    class="text-xs text-slate-400 hover:text-slate-200 transition flex-shrink-0"
+                    x-text="copied ? 'Copied!' : 'Copy'"></button>
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- API key (arr services) -->
+        {% if svc.api_key %}
+        <div>
+          <div class="text-xs text-slate-500 mb-1">API key</div>
+          <div class="text-xs font-mono text-slate-400 truncate" x-data="{ keyRevealed: false }">
+            <span x-text="keyRevealed ? '{{ svc.api_key }}' : '{{ svc.api_key[:4] }}••••••••••••••••••••••••••••••••'"></span>
+            <button @click="keyRevealed = !keyRevealed"
+                    class="ml-2 text-slate-500 hover:text-slate-300 transition"
+                    x-text="keyRevealed ? 'hide' : 'show'"></button>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- CTAs -->
+  <div>
+    <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-4">Jump right in</h2>
+    <div class="flex flex-wrap gap-3">
+      <a href="{{ radarr_url }}/add/search" target="_blank" rel="noopener"
+         class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-violet-500 to-pink-500 text-white font-medium shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 hover:scale-[1.02] transition transform text-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 16h4m10 0h4"/>
+        </svg>
+        Add your first movie
+      </a>
+      <a href="{{ sonarr_url }}/add/search" target="_blank" rel="noopener"
+         class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-violet-500 to-pink-500 text-white font-medium shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 hover:scale-[1.02] transition transform text-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+        </svg>
+        Add your first show
+      </a>
+    </div>
+  </div>
+
+  <!-- What's next -->
+  <div class="rounded-xl p-5 bg-slate-900/40 border border-slate-700/50">
+    <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">What's next</h2>
+    <ul class="space-y-2 text-sm text-slate-300">
+      {% if compose_path %}
+      <li class="flex gap-2">
+        <span class="text-violet-400 flex-shrink-0">•</span>
+        <span>Compose file lives at <code class="text-xs font-mono bg-slate-800 px-1 py-0.5 rounded text-slate-200">{{ compose_path }}</code></span>
+      </li>
+      {% endif %}
+      {% if mount_path %}
+      <li class="flex gap-2">
+        <span class="text-violet-400 flex-shrink-0">•</span>
+        <span>Media is stored on <code class="text-xs font-mono bg-slate-800 px-1 py-0.5 rounded text-slate-200">{{ mount_path }}</code></span>
+      </li>
+      {% endif %}
+      <li class="flex gap-2">
+        <span class="text-violet-400 flex-shrink-0">•</span>
+        <span>To stop the stack:
+          <code class="text-xs font-mono bg-slate-800 px-1 py-0.5 rounded text-slate-200">cd ~/mediahub &amp;&amp; docker compose down</code>
+        </span>
+      </li>
+      <li class="flex gap-2">
+        <span class="text-violet-400 flex-shrink-0">•</span>
+        <span>To restart:
+          <code class="text-xs font-mono bg-slate-800 px-1 py-0.5 rounded text-slate-200">cd ~/mediahub &amp;&amp; docker compose up -d</code>
+        </span>
+      </li>
+      <li class="flex gap-2">
+        <span class="text-violet-400 flex-shrink-0">•</span>
+        <a href="https://github.com/dhouchin/media-hub" target="_blank" rel="noopener"
+           class="text-violet-300 hover:text-violet-200 underline underline-offset-2 transition">
+          Full docs on GitHub ↗
+        </a>
+      </li>
+    </ul>
+  </div>
+
+  <!-- Reset -->
+  <div class="text-center pt-2">
+    <button
+      hx-post="/done/reset"
+      hx-confirm="This will clear all wizard state and start over. The stack itself will keep running. Continue?"
+      class="text-xs text-slate-500 hover:text-rose-300 underline underline-offset-2 transition">
+      Reset wizard
+    </button>
+  </div>
+
+</div>
+{% endblock %}

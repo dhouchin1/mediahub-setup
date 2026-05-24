@@ -1,0 +1,115 @@
+<div id="drive-list">
+  {% if drives %}
+  <ul class="space-y-3">
+    {% for d in drives %}
+    <li class="rounded-xl border p-5 transition
+      {% if d.status == 'green' %}border-emerald-500/30 bg-emerald-500/5
+      {% elif d.status == 'amber' %}border-amber-500/30 bg-amber-500/5
+      {% else %}border-rose-500/30 bg-rose-500/5{% endif %}"
+      {% if not d.writable %}x-data="{ open: false }"{% endif %}>
+
+      <div class="flex items-start gap-4">
+        <!-- Status dot -->
+        <div class="flex-shrink-0 mt-1 w-3 h-3 rounded-full
+          {% if d.status == 'green' %}bg-emerald-400
+          {% elif d.status == 'amber' %}bg-amber-400
+          {% else %}bg-rose-400{% endif %}"></div>
+
+        <!-- Info -->
+        <div class="flex-1 min-w-0">
+          <div class="flex items-baseline gap-2 flex-wrap mb-1">
+            <span class="font-semibold text-slate-100 text-base">{{ d.name }}</span>
+            <span class="text-xs font-mono text-slate-400">{{ d.mount_path }}</span>
+            <span class="text-xs px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">{{ d.filesystem }}</span>
+          </div>
+
+          <div class="text-sm text-slate-400 mb-3">
+            {% if d.free_bytes > 0 %}
+              {{ drives_fmt_gb(d.free_bytes) }} free of {{ drives_fmt_gb(d.total_bytes) }}
+              {% if d.status == 'amber' %}
+                <span class="text-amber-400 ml-1">&mdash; low free space</span>
+              {% endif %}
+            {% else %}
+              {{ drives_fmt_gb(d.total_bytes) }} total &mdash; usage unknown
+            {% endif %}
+            {% if not d.writable %}
+              <span class="text-rose-400 ml-1">&mdash; read-only</span>
+            {% endif %}
+          </div>
+
+          {% if not d.writable %}
+          <!-- NTFS / read-only fix hint -->
+          <button @click="open = !open"
+                  class="mb-3 text-xs text-violet-300 hover:text-violet-200 inline-flex items-center gap-1">
+            <span x-text="open ? 'Hide fix' : 'How to fix'"></span>
+            <svg class="w-3 h-3 transition" :class="{ 'rotate-180': open }"
+                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div x-show="open" x-transition
+               class="mb-3 text-sm text-slate-300 bg-slate-900/60 rounded-lg p-3 border border-slate-700/50 leading-relaxed">
+            macOS doesn&rsquo;t write to NTFS natively.
+            <strong class="text-slate-100">Easiest fix:</strong> buy
+            <a href="https://www.paragon-software.com/home/ntfs-mac/" target="_blank" rel="noopener"
+               class="text-violet-300 hover:underline">Paragon NTFS (~$20)</a>.
+            Or reformat the drive to APFS in
+            <strong class="text-slate-100">Disk Utility</strong>
+            (this erases all data on the drive).
+          </div>
+          {% endif %}
+
+          <!-- Pick button -->
+          <form method="POST" action="{{ url_for('drive.pick') }}">
+            <input type="hidden" name="mount_path" value="{{ d.mount_path }}">
+            <button type="submit"
+              {% if not d.writable %}disabled{% endif %}
+              class="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition
+                {% if d.writable %}
+                  {% if d.status == 'green' %}bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40
+                  {% else %}bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40{% endif %}
+                {% else %}bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/50{% endif %}">
+              {% if not d.writable %}
+                Read-only &mdash; cannot use
+              {% else %}
+                Pick this drive
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+                </svg>
+              {% endif %}
+            </button>
+          </form>
+        </div>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+
+  {% else %}
+  <!-- Empty state -->
+  <div class="rounded-xl border border-slate-700/50 bg-slate-900/40 p-8 text-center">
+    <div class="text-4xl mb-3 text-slate-500">
+      <svg class="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0M13 17H9m8 0h2M3 17h2M9 11h6m-6-4h6m-6 8h6"/>
+      </svg>
+    </div>
+    <p class="text-slate-300 font-medium mb-1">No external drives found</p>
+    <p class="text-slate-400 text-sm mb-5">
+      Plug in an external drive, then click Refresh. If your drive isn't
+      appearing, it may be unmounted &mdash; open Disk Utility to mount it.
+    </p>
+    <form method="POST" action="{{ url_for('drive.open_disk_utility') }}">
+      <button type="submit"
+              class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
+                     bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/60 transition">
+        Open Disk Utility
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+        </svg>
+      </button>
+    </form>
+  </div>
+  {% endif %}
+</div>

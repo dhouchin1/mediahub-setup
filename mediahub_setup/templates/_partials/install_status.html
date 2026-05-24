@@ -1,0 +1,112 @@
+<div id="install-status-root"
+     data-install-status="{{ data.status }}"
+     {% if data.status == 'running' %}
+     hx-get="{{ url_for('install.status') }}"
+     hx-trigger="every 1s"
+     hx-swap="outerHTML"
+     {% endif %}>
+
+  <!-- Progress bar -->
+  <div class="mb-6">
+    <div class="flex items-center justify-between text-xs text-slate-400 mb-2">
+      <span>
+        {% if data.status == 'running' %}Installing…
+        {% elif data.status == 'ready' %}Install complete
+        {% elif data.status == 'error' %}Install failed
+        {% else %}Waiting{% endif %}
+      </span>
+      <span>{{ data.progress }}%</span>
+    </div>
+    <div class="h-2 rounded-full bg-slate-800 overflow-hidden">
+      <div class="h-full rounded-full transition-all duration-500
+        {% if data.status == 'error' %}bg-rose-500
+        {% elif data.status == 'ready' %}bg-emerald-500
+        {% else %}bg-gradient-to-r from-violet-500 to-pink-500{% endif %}"
+        style="width: {{ data.progress }}%">
+      </div>
+    </div>
+  </div>
+
+  <!-- Service health badges -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+    {% for svc in services %}
+    {% set svc_status = data.services.get(svc.key, 'pending') %}
+    <div class="rounded-xl px-3 py-2.5 text-center
+      {% if svc_status == 'ready' %}bg-emerald-500/20 border border-emerald-500/30
+      {% elif svc_status == 'starting' %}bg-amber-500/20 border border-amber-500/30
+      {% elif svc_status == 'timeout' %}bg-rose-500/20 border border-rose-500/30
+      {% else %}bg-slate-700/60 border border-slate-700/40{% endif %}">
+      <div class="text-sm font-medium
+        {% if svc_status == 'ready' %}text-emerald-300
+        {% elif svc_status == 'starting' %}text-amber-300
+        {% elif svc_status == 'timeout' %}text-rose-300
+        {% else %}text-slate-400{% endif %}">
+        {{ svc.label }}
+      </div>
+      <div class="text-xs mt-0.5
+        {% if svc_status == 'ready' %}text-emerald-400
+        {% elif svc_status == 'starting' %}text-amber-400
+        {% elif svc_status == 'timeout' %}text-rose-400
+        {% else %}text-slate-500{% endif %}">
+        {% if svc_status == 'ready' %}ready
+        {% elif svc_status == 'starting' %}starting…
+        {% elif svc_status == 'timeout' %}timed out
+        {% else %}pending{% endif %}
+        &nbsp;:{{ ports.get(svc.port_key, '') }}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Log output -->
+  {% if data.log_lines %}
+  <div class="font-mono text-xs bg-slate-950/60 rounded-lg p-4 max-h-64 overflow-y-auto mb-6 space-y-0.5">
+    {% for line in data.log_lines %}
+    <div class="text-slate-300 leading-relaxed whitespace-pre-wrap break-all">{{ line }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Error box -->
+  {% if data.status == 'error' and data.error %}
+  <div class="mb-6 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
+    <div class="font-semibold mb-1">Install failed</div>
+    <div class="font-mono text-xs text-rose-400">{{ data.error }}</div>
+  </div>
+  {% endif %}
+
+  <!-- Footer actions -->
+  <div class="flex items-center justify-between pt-4 border-t border-slate-700/50">
+    <a href="{{ url_for('settings.index') }}"
+       class="px-4 py-2 text-sm rounded-lg text-slate-400 hover:text-slate-200 transition">
+      Back
+    </a>
+
+    <div class="flex items-center gap-3">
+      {% if data.status == 'error' %}
+      <form method="post" action="{{ url_for('install.retry') }}">
+        <button type="submit"
+                class="inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium bg-gradient-to-r from-violet-500 to-pink-500 text-white shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 transition">
+          Retry
+        </button>
+      </form>
+      {% elif data.status == 'ready' %}
+      <a href="{{ url_for('wiring.index') }}"
+         class="inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium bg-gradient-to-r from-violet-500 to-pink-500 text-white shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 transition">
+        Continue
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+        </svg>
+      </a>
+      {% else %}
+      <span class="inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium bg-slate-800 text-slate-500 cursor-not-allowed">
+        Continue
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+        </svg>
+      </span>
+      {% endif %}
+    </div>
+  </div>
+
+</div>

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Welcome — MediaHub Setup{% endblock %}
+
+{% block content %}
+<div class="glass rounded-3xl p-8 sm:p-12 shadow-2xl">
+  <div class="max-w-2xl">
+    <h1 class="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
+      Let's set up your <span class="bg-gradient-to-r from-violet-400 to-pink-400 bg-clip-text text-transparent">media library</span>.
+    </h1>
+    <p class="text-slate-300 text-lg leading-relaxed mb-6">
+      In about 15 minutes you'll have Sonarr, Radarr, Prowlarr, and qBittorrent
+      running in Docker, fully wired together, ready to find and organize your
+      TV and movies.
+    </p>
+
+    <div class="grid sm:grid-cols-2 gap-3 mb-8">
+      <div class="rounded-xl p-4 bg-slate-900/40 border border-slate-700/50">
+        <div class="text-violet-300 text-xs font-semibold uppercase tracking-wider mb-1">What you need</div>
+        <ul class="text-sm text-slate-300 space-y-1">
+          <li>• Docker (OrbStack recommended)</li>
+          <li>• A writable external drive</li>
+          <li>• About 15 minutes</li>
+        </ul>
+      </div>
+      <div class="rounded-xl p-4 bg-slate-900/40 border border-slate-700/50">
+        <div class="text-pink-300 text-xs font-semibold uppercase tracking-wider mb-1">What you'll get</div>
+        <ul class="text-sm text-slate-300 space-y-1">
+          <li>• Sonarr (TV) + Radarr (movies)</li>
+          <li>• Prowlarr (indexer manager)</li>
+          <li>• qBittorrent (downloader)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-between">
+      <p class="text-xs text-slate-500">
+        Nothing changes on your system until the Install step.
+      </p>
+      <a href="{{ url_for('preflight.index') }}"
+         class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-violet-500 to-pink-500 text-white font-medium shadow-lg shadow-violet-500/40 hover:shadow-violet-500/60 hover:scale-[1.02] transition transform">
+        Get started
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+        </svg>
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

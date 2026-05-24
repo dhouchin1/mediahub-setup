@@ -1,0 +1,62 @@
+name: media-hub
+
+x-common-env: &common-env
+  PUID: {{ puid }}
+  PGID: {{ pgid }}
+  TZ: {{ tz }}
+
+services:
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: mediahub-prowlarr
+    environment: *common-env
+    volumes:
+      - ./config/prowlarr:/config
+    ports:
+      - "{{ ports.prowlarr }}:9696"
+    restart: unless-stopped
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: mediahub-sonarr
+    environment: *common-env
+    volumes:
+      - ./config/sonarr:/config
+      - ${MEDIA_ROOT}:/data
+    ports:
+      - "{{ ports.sonarr }}:8989"
+    restart: unless-stopped
+    depends_on:
+      - prowlarr
+
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: mediahub-radarr
+    environment: *common-env
+    volumes:
+      - ./config/radarr:/config
+      - ${MEDIA_ROOT}:/data
+    ports:
+      - "{{ ports.radarr }}:7878"
+    restart: unless-stopped
+    depends_on:
+      - prowlarr
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: mediahub-qbittorrent
+    environment:
+      <<: *common-env
+      WEBUI_PORT: {{ ports.qbittorrent_web }}
+    volumes:
+      - ./config/qbittorrent:/config
+      - ${MEDIA_ROOT}:/data
+    ports:
+      - "{{ ports.qbittorrent_web }}:{{ ports.qbittorrent_web }}"
+      - "{{ ports.qbittorrent_bt }}:6881"
+      - "{{ ports.qbittorrent_bt }}:6881/udp"
+    restart: unless-stopped
+
+networks:
+  default:
+    name: mediahub

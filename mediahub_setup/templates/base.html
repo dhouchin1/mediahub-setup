@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}MediaHub Setup{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+    body {
+      background:
+        radial-gradient(ellipse at top left, rgba(139, 92, 246, 0.25) 0%, transparent 50%),
+        radial-gradient(ellipse at bottom right, rgba(236, 72, 153, 0.20) 0%, transparent 55%),
+        linear-gradient(135deg, #0f0a1f 0%, #1a0f33 50%, #2a0f2a 100%);
+      background-attachment: fixed;
+      min-height: 100vh;
+    }
+    .glass {
+      background: rgba(15, 12, 28, 0.55);
+      backdrop-filter: blur(20px) saturate(140%);
+      -webkit-backdrop-filter: blur(20px) saturate(140%);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+  </style>
+</head>
+<body class="text-slate-100 antialiased">
+  <div class="min-h-screen flex flex-col">
+
+    <!-- Top bar -->
+    <header class="px-6 py-5 flex items-center justify-between max-w-5xl mx-auto w-full">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-pink-500 flex items-center justify-center font-bold text-white shadow-lg shadow-violet-500/30">M</div>
+        <div>
+          <div class="font-semibold text-base leading-tight">MediaHub Setup</div>
+          <div class="text-xs text-slate-400 leading-tight">Self-hosted *arr stack installer</div>
+        </div>
+      </div>
+      <a href="https://github.com/dhouchin/mediahub-setup" target="_blank" rel="noopener" class="text-xs text-slate-400 hover:text-slate-200 transition">
+        Docs ↗
+      </a>
+    </header>
+
+    <!-- Stepper -->
+    <nav aria-label="Wizard progress" class="px-6 max-w-5xl mx-auto w-full">
+      {% set current_idx = step_index(step) %}
+      <ol class="flex items-center gap-1 sm:gap-2 mb-8 overflow-x-auto pb-2">
+        {% for key, label in wizard_steps %}
+        {% set is_current = loop.index0 == current_idx %}
+        {% set is_past = loop.index0 < current_idx %}
+        <li class="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition
+            {% if is_current %}bg-violet-500 text-white shadow-lg shadow-violet-500/40
+            {% elif is_past %}bg-violet-500/20 text-violet-300
+            {% else %}bg-slate-800/60 text-slate-500{% endif %}">
+            <span class="w-4 h-4 rounded-full text-[10px] flex items-center justify-center
+              {% if is_current %}bg-white text-violet-600
+              {% elif is_past %}bg-violet-400 text-violet-950
+              {% else %}bg-slate-700 text-slate-400{% endif %}">{{ loop.index }}</span>
+            <span class="hidden sm:inline">{{ label }}</span>
+          </div>
+          {% if not loop.last %}
+            <div class="w-2 sm:w-6 h-px bg-slate-700"></div>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ol>
+    </nav>
+
+    <!-- Page content -->
+    <main class="flex-1 px-6 pb-12 max-w-5xl mx-auto w-full">
+      {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="px-6 py-4 text-center text-xs text-slate-500">
+      Running locally — nothing leaves this Mac.
+    </footer>
+  </div>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>
