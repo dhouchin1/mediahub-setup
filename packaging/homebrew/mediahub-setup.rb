@@ -3,10 +3,10 @@
 # This file lives in the source repo as a template.
 # To publish a tap:
 #
-#   1. Create a new GitHub repo named  dhouchin/homebrew-mediahub
+#   1. Create a new GitHub repo named  dhouchin1/homebrew-mediahub
 #   2. After each PyPI release, update the url + sha256 below and push.
 #   3. Users install with:
-#        brew tap dhouchin/mediahub
+#        brew tap dhouchin1/mediahub
 #        brew install mediahub-setup
 #
 # Generating sha256 after a release:
@@ -25,12 +25,12 @@ class MediahubSetup < Formula
   include Language::Python::Virtualenv
 
   desc "Web-wizard installer for a self-hosted Sonarr/Radarr/Prowlarr/qBittorrent stack"
-  homepage "https://github.com/dhouchin/mediahub-setup"
+  homepage "https://github.com/dhouchin1/mediahub-setup"
   # TODO: update url + sha256 after first PyPI release
   url "https://files.pythonhosted.org/packages/source/m/mediahub-setup/mediahub_setup-0.1.0.tar.gz"
   sha256 "REPLACE_AFTER_FIRST_PYPI_RELEASE"
   license "MIT"
-  head "https://github.com/dhouchin/mediahub-setup.git", branch: "main"
+  head "https://github.com/dhouchin1/mediahub-setup.git", branch: "main"
 
   depends_on "python@3.12"
 

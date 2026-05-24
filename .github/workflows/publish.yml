@@ -3,7 +3,7 @@ name: Publish to PyPI
 # Triggers on a GitHub Release being published.
 # Uses OIDC trusted publishing — no PyPI API token needed in secrets.
 # Setup: https://docs.pypi.org/trusted-publishers/adding-a-publisher/
-#   Publisher:  dhouchin/mediahub-setup
+#   Publisher:  dhouchin1/mediahub-setup
 #   Workflow:   publish.yml
 #   Environment: pypi
 

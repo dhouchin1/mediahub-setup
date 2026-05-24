@@ -44,8 +44,8 @@ mediahub-setup = "mediahub_setup.cli:main"
 mediahub-setup-menubar = "mediahub_setup.menubar:main"
 
 [project.urls]
-Homepage = "https://github.com/dhouchin/mediahub-setup"
-Issues = "https://github.com/dhouchin/mediahub-setup/issues"
+Homepage = "https://github.com/dhouchin1/mediahub-setup"
+Issues = "https://github.com/dhouchin1/mediahub-setup/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["mediahub_setup"]

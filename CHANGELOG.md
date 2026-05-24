@@ -32,4 +32,4 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-[Unreleased]: https://github.com/dhouchin/mediahub-setup/compare/HEAD...HEAD
+[Unreleased]: https://github.com/dhouchin1/mediahub-setup/compare/HEAD...HEAD

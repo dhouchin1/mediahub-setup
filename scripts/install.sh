@@ -2,7 +2,7 @@
 # MediaHub Setup — one-line installer
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/dhouchin/mediahub-setup/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/dhouchin1/mediahub-setup/main/scripts/install.sh | bash
 #
 # What it does:
 #   1. Verifies macOS + Python 3.12+

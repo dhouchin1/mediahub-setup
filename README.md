@@ -5,7 +5,7 @@ self-hosted Sonarr + Radarr stack" in about 15 minutes — no config
 files to hand-edit, no API keys to copy-paste by hand.
 
 ![status: early alpha](https://img.shields.io/badge/status-alpha-orange)
-[![CI](https://github.com/dhouchin/mediahub-setup/actions/workflows/ci.yml/badge.svg)](https://github.com/dhouchin/mediahub-setup/actions/workflows/ci.yml)
+[![CI](https://github.com/dhouchin1/mediahub-setup/actions/workflows/ci.yml/badge.svg)](https://github.com/dhouchin1/mediahub-setup/actions/workflows/ci.yml)
 
 ---
 
@@ -14,7 +14,7 @@ files to hand-edit, no API keys to copy-paste by hand.
 ### One-liner (fastest)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dhouchin/mediahub-setup/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/dhouchin1/mediahub-setup/main/scripts/install.sh | bash
 ```
 
 The script installs `pipx` if you don't have it, then isolates
@@ -30,7 +30,7 @@ pipx install mediahub-setup
 ### Homebrew tap (coming after first release)
 
 ```bash
-brew tap dhouchin/mediahub
+brew tap dhouchin1/mediahub
 brew install mediahub-setup
 ```
 
@@ -91,7 +91,7 @@ MediaHub Setup** when you're done.
 ### Install as a standalone .app
 
 Download `MediaHub Setup.dmg` from the
-[latest GitHub Release](https://github.com/dhouchin/mediahub-setup/releases),
+[latest GitHub Release](https://github.com/dhouchin1/mediahub-setup/releases),
 open it, and drag to Applications.  
 Or build it yourself:
 
@@ -129,7 +129,7 @@ open 'dist/MediaHub Setup.app'
 ## Development
 
 ```bash
-git clone https://github.com/dhouchin/mediahub-setup
+git clone https://github.com/dhouchin1/mediahub-setup
 cd mediahub-setup
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -e '.[dev]'
@@ -153,7 +153,7 @@ ruff format --check .   # format check
    automatically via OIDC trusted publishing (no API token needed).
 4. Update `packaging/homebrew/mediahub-setup.rb` with the new PyPI sdist
    URL + SHA256, then push to the
-   [homebrew-mediahub](https://github.com/dhouchin/homebrew-mediahub) tap repo.
+   [homebrew-mediahub](https://github.com/dhouchin1/homebrew-mediahub) tap repo.
 
 ---
 
