@@ -65,7 +65,7 @@ class MediaHubMenuBarApp(rumps.App):
             "Open MediaHub Setup…",
             callback=None,  # enabled once server is up
         )
-        self._status = rumps.MenuItem("Starting…")     # no callback → greyed out
+        self._status = rumps.MenuItem("Starting…")  # no callback → greyed out
         self._version = rumps.MenuItem(f"v{__version__}")  # informational
         _quit = rumps.MenuItem("Quit MediaHub Setup", callback=self._on_quit)
 

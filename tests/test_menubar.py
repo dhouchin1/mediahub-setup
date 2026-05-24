@@ -13,7 +13,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
@@ -67,7 +66,7 @@ def test_main_callable_with_mocked_rumps():
     # Make MediaHubMenuBarApp instantiation succeed without a real event loop
     app_instance = MagicMock()
     rumps_mock.App = MagicMock(return_value=app_instance)
-    rumps_mock.timer = lambda interval: (lambda fn: fn)  # no-op decorator
+    rumps_mock.timer = lambda interval: lambda fn: fn  # no-op decorator
     rumps_mock.MenuItem = MagicMock()
     rumps_mock.quit_application = MagicMock()
 

@@ -52,7 +52,7 @@ OPTIONS = {
         "CFBundleVersion": "0.1.0",
         "CFBundleShortVersionString": "0.1.0",
         "NSHumanReadableCopyright": "© 2025 Dan Houchin. MIT License.",
-        "LSUIElement": True,           # hide from Dock — status-bar only
+        "LSUIElement": True,  # hide from Dock — status-bar only
         "NSHighResolutionCapable": True,
         "NSRequiresAquaSystemAppearance": False,  # allow dark mode
     },
