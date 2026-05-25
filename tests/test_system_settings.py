@@ -114,11 +114,21 @@ def test_generate_password_uniqueness():
 # ---------------------------------------------------------------------------
 
 
-def test_default_ports_contains_all_services():
+def test_default_ports_contains_all_core_services():
+    """Core services must always be present in DEFAULT_PORTS."""
     required = {"sonarr", "radarr", "prowlarr", "qbittorrent_web", "qbittorrent_bt"}
-    assert required == set(DEFAULT_PORTS.keys())
+    assert required <= set(DEFAULT_PORTS.keys())
+
+
+def test_default_ports_includes_optional_services():
+    """Optional services should also have default ports (used when enabled)."""
+    optional = {"jellyfin", "jellyseerr", "bazarr", "flaresolverr", "notifiarr", "caddy"}
+    assert optional <= set(DEFAULT_PORTS.keys())
 
 
 def test_default_ports_values_are_valid():
+    """Every port must be in the valid 1-65535 range. Caddy uses privileged
+    port 80, which is valid; the launcher tier (Docker Desktop / OrbStack)
+    handles the privileged-bind."""
     for svc, port in DEFAULT_PORTS.items():
-        assert 1024 <= port <= 65535, f"port {port} for {svc} is out of range"
+        assert 1 <= port <= 65535, f"port {port} for {svc} is out of range"

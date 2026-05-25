@@ -4,17 +4,34 @@ from __future__ import annotations
 
 from flask import Blueprint, flash, redirect, render_template, url_for
 
-from .. import installer, state
+from .. import installer, services, state
 
 bp = Blueprint("install", __name__, url_prefix="/install")
 
-# Services shown in the summary / status UI
-SERVICES = [
+# Core services always shown in the summary / status UI
+CORE_SERVICES = [
     {"key": "sonarr", "label": "Sonarr", "port_key": "sonarr"},
     {"key": "radarr", "label": "Radarr", "port_key": "radarr"},
     {"key": "prowlarr", "label": "Prowlarr", "port_key": "prowlarr"},
     {"key": "qbittorrent", "label": "qBittorrent", "port_key": "qbittorrent_web"},
 ]
+
+
+def _services_for_settings(settings: dict | None) -> list[dict]:
+    """Build the SERVICES list shown in the install UI, adding optional ones
+    based on the current settings.enabled_services."""
+    out = list(CORE_SERVICES)
+    enabled = (settings or {}).get("enabled_services") or []
+    for key in enabled:
+        if key == "recyclarr":
+            continue  # CLI tool, no port to poll
+        svc = services.ALL.get(key)
+        if not svc:
+            continue
+        out.append(
+            {"key": key, "label": svc.get("name", key), "port_key": svc.get("port_key") or key}
+        )
+    return out
 
 
 def _guard() -> tuple | None:
@@ -40,6 +57,7 @@ def index():
     settings = state.get("settings")
     status = installer.install_status()
     install_dir = installer.INSTALL_DIR
+    svc_list = _services_for_settings(settings)
 
     return render_template(
         "install.html",
@@ -47,7 +65,7 @@ def index():
         drive=drive,
         settings=settings,
         install_dir=install_dir,
-        services=SERVICES,
+        services=svc_list,
         status=status,
     )
 
@@ -116,10 +134,11 @@ def status():
         )
 
     ports = settings["ports"] if settings else {}
+    svc_list = _services_for_settings(settings)
 
     return render_template(
         "_partials/install_status.html",
         data=data,
-        services=SERVICES,
+        services=svc_list,
         ports=ports,
     )

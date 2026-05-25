@@ -57,6 +57,113 @@ services:
       - "{{ ports.qbittorrent_bt }}:6881/udp"
     restart: unless-stopped
 
+{% if 'jellyfin' in enabled_services %}
+  jellyfin:
+    image: lscr.io/linuxserver/jellyfin:latest
+    container_name: mediahub-jellyfin
+    environment:
+      <<: *common-env
+      JELLYFIN_PublishedServerUrl: http://localhost:{{ ports.jellyfin }}
+    volumes:
+      - ./config/jellyfin:/config
+      - ${MEDIA_ROOT}/media:/data/media
+    ports:
+      - "{{ ports.jellyfin }}:8096"
+    restart: unless-stopped
+{% endif %}
+
+{% if 'jellyseerr' in enabled_services %}
+  jellyseerr:
+    image: fallenbagel/jellyseerr:latest
+    container_name: mediahub-jellyseerr
+    environment:
+      LOG_LEVEL: info
+      TZ: {{ tz }}
+      PORT: 5055
+    volumes:
+      - ./config/jellyseerr:/app/config
+    ports:
+      - "{{ ports.jellyseerr }}:5055"
+    restart: unless-stopped
+{% if 'jellyfin' in enabled_services %}
+    depends_on:
+      - jellyfin
+{% endif %}
+{% endif %}
+
+{% if 'bazarr' in enabled_services %}
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:latest
+    container_name: mediahub-bazarr
+    environment: *common-env
+    volumes:
+      - ./config/bazarr:/config
+      - ${MEDIA_ROOT}:/data
+    ports:
+      - "{{ ports.bazarr }}:6767"
+    restart: unless-stopped
+    depends_on:
+      - sonarr
+      - radarr
+{% endif %}
+
+{% if 'flaresolverr' in enabled_services %}
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: mediahub-flaresolverr
+    environment:
+      LOG_LEVEL: info
+      TZ: {{ tz }}
+    ports:
+      - "{{ ports.flaresolverr }}:8191"
+    restart: unless-stopped
+{% endif %}
+
+{% if 'notifiarr' in enabled_services %}
+  notifiarr:
+    image: golift/notifiarr:latest
+    container_name: mediahub-notifiarr
+    hostname: mediahub-notifiarr
+    environment: *common-env
+    volumes:
+      - ./config/notifiarr:/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "{{ ports.notifiarr }}:5454"
+    restart: unless-stopped
+{% endif %}
+
+{% if 'recyclarr' in enabled_services %}
+  recyclarr:
+    image: ghcr.io/recyclarr/recyclarr:latest
+    container_name: mediahub-recyclarr
+    user: "{{ puid }}:{{ pgid }}"
+    environment:
+      TZ: {{ tz }}
+      CRON_SCHEDULE: "0 4 * * *"
+    volumes:
+      - ./config/recyclarr:/config
+    restart: unless-stopped
+    depends_on:
+      - sonarr
+      - radarr
+{% endif %}
+
+{% if 'caddy' in enabled_services %}
+  caddy:
+    image: caddy:2-alpine
+    container_name: mediahub-caddy
+    volumes:
+      - ./config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./config/caddy/data:/data
+      - ./config/caddy/config:/config
+    ports:
+      - "{{ ports.caddy }}:80"
+      - "443:443"
+      - "443:443/udp"
+    restart: unless-stopped
+{% endif %}
+
 networks:
   default:
     name: mediahub

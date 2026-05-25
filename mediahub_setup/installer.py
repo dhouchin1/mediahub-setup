@@ -18,21 +18,23 @@ from typing import Any
 import requests
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from . import services
+
 # ---------------------------------------------------------------------------
 # Module-level install state
 # ---------------------------------------------------------------------------
 
 _lock = threading.Lock()
 
+
+def _initial_services_state() -> dict[str, str]:
+    return {k: "pending" for k in services.core_keys()}
+
+
 _install_state: dict[str, Any] = {
     "status": "idle",  # idle | running | ready | error
     "log_lines": deque(maxlen=500),
-    "services": {
-        "sonarr": "pending",
-        "radarr": "pending",
-        "prowlarr": "pending",
-        "qbittorrent": "pending",
-    },
+    "services": _initial_services_state(),
     "started_at": None,
     "finished_at": None,
     "error": None,
@@ -77,8 +79,8 @@ def prepare_media_layout(drive_mount: str) -> None:
 def render_compose(install_dir: Path, settings: dict) -> Path:
     """Render docker-compose.yml.j2 into install_dir/docker-compose.yml.
 
-    ``settings`` must have keys: tz, puid, pgid, ports (dict with sonarr,
-    radarr, prowlarr, qbittorrent_web, qbittorrent_bt).
+    ``settings`` must have keys: tz, puid, pgid, ports (dict). Optional:
+    ``enabled_services`` (list of service keys beyond the core stack).
     Returns the path to the written file.
     """
     env = Environment(
@@ -87,11 +89,13 @@ def render_compose(install_dir: Path, settings: dict) -> Path:
         keep_trailing_newline=True,
     )
     template = env.get_template(_COMPOSE_TEMPLATE)
+    enabled = settings.get("enabled_services", [])
     rendered = template.render(
         tz=settings["tz"],
         puid=settings["puid"],
         pgid=settings["pgid"],
         ports=settings["ports"],
+        enabled_services=enabled,
     )
     out = install_dir / "docker-compose.yml"
     install_dir.mkdir(parents=True, exist_ok=True)
@@ -182,12 +186,26 @@ def _run_install(install_dir: Path, settings: dict) -> None:
     _log("[install] docker compose up -d finished — polling service health …")
 
     ports = settings.get("ports", {})
-    service_urls = {
-        "sonarr": f"http://localhost:{ports.get('sonarr', 8989)}",
-        "radarr": f"http://localhost:{ports.get('radarr', 7878)}",
-        "prowlarr": f"http://localhost:{ports.get('prowlarr', 9696)}",
-        "qbittorrent": f"http://localhost:{ports.get('qbittorrent_web', 8080)}",
-    }
+    enabled = settings.get("enabled_services", [])
+    all_to_poll = services.core_keys() + [k for k in enabled if k != "recyclarr"]
+
+    service_urls: dict[str, str] = {}
+    for key in all_to_poll:
+        svc = services.ALL.get(key)
+        if not svc:
+            continue
+        port_key = svc.get("port_key") or ""
+        if not port_key:
+            continue
+        port = ports.get(port_key, svc.get("default_port", 0))
+        if not port:
+            continue
+        service_urls[key] = f"http://localhost:{port}"
+
+    # Ensure each polled service has a state slot
+    with _lock:
+        for key in service_urls:
+            _install_state["services"].setdefault(key, "pending")
 
     poll_threads = []
     for svc, url in service_urls.items():
@@ -220,16 +238,13 @@ def start_install(install_dir: Path, drive: dict, settings: dict) -> bool:
         if _install_state["status"] in ("running",):
             return False
         # Reset transient state for a fresh run (allows retry after error)
+        enabled = settings.get("enabled_services", [])
+        all_services = services.core_keys() + [k for k in enabled if k != "recyclarr"]
         _install_state.update(
             {
                 "status": "running",
                 "log_lines": deque(maxlen=500),
-                "services": {
-                    "sonarr": "pending",
-                    "radarr": "pending",
-                    "prowlarr": "pending",
-                    "qbittorrent": "pending",
-                },
+                "services": {k: "pending" for k in all_services},
                 "started_at": datetime.now(tz=UTC).isoformat(),
                 "finished_at": None,
                 "error": None,

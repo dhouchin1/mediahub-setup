@@ -1,0 +1,37 @@
+<div id="update-area"
+     {% if update_status.status == 'running' %}
+     hx-get="{{ url_for('dashboard.update_status_partial') }}"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML"
+     {% endif %}>
+
+  {% if update_status.status == 'idle' %}
+  <p class="text-[11px] text-slate-500">Hasn't been run yet this session.</p>
+
+  {% elif update_status.status == 'running' %}
+  <div class="flex items-center gap-2 text-sm text-violet-300 mb-3">
+    <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+    </svg>
+    Pulling images & recreating containers…
+  </div>
+
+  {% elif update_status.status == 'ready' %}
+  <p class="text-sm text-emerald-300 mb-3">✓ Update complete.</p>
+
+  {% elif update_status.status == 'error' %}
+  <div class="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-300 mb-3">
+    <div class="font-semibold mb-1">Update failed</div>
+    <div class="font-mono text-xs">{{ update_status.error }}</div>
+  </div>
+  {% endif %}
+
+  {% if update_status.log_lines %}
+  <div class="font-mono text-[11px] bg-slate-950/60 rounded-lg p-3 max-h-48 overflow-y-auto space-y-0.5">
+    {% for line in update_status.log_lines[-40:] %}
+    <div class="text-slate-300 leading-snug whitespace-pre-wrap break-all">{{ line }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>

@@ -17,7 +17,7 @@ def index() -> str:
     return render_template(
         "wiring.html",
         step="wiring",
-        task_names=wiring_runner.TASK_NAMES,
+        task_names=wiring_runner.planned_task_names(),
         phase=status["phase"],
         tasks=status["tasks"],
     )

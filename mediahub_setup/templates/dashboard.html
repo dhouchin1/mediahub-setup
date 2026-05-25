@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — MediaHub Setup{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+  <!-- Header -->
+  <div class="glass rounded-3xl p-8 sm:p-10 shadow-2xl">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div>
+        <h1 class="text-3xl font-bold mb-2">Stack dashboard</h1>
+        <p class="text-slate-400">
+          Live container health, hardware usage, and one-click maintenance.
+        </p>
+      </div>
+      <div class="flex gap-2 items-center">
+        <a href="{{ url_for('done.index') }}" class="text-xs text-slate-400 hover:text-slate-200 transition">← Done page</a>
+      </div>
+    </div>
+
+    {% if not docker_ok %}
+    <div class="mt-6 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
+      <div class="font-semibold mb-1">Docker isn't responding</div>
+      <p>Start Docker Desktop or OrbStack, then refresh this page.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Hardware + disk gauges -->
+  <div class="glass rounded-3xl p-6 sm:p-8 shadow-2xl">
+    <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-4">Hardware & storage</h2>
+    <div id="dashboard-stats"
+         hx-get="{{ url_for('dashboard.status_partial') }}"
+         hx-trigger="every 3s"
+         hx-swap="innerHTML">
+      {% include "_partials/dashboard_stats.html" %}
+    </div>
+  </div>
+
+  <!-- Update all containers -->
+  <div class="glass rounded-3xl p-6 sm:p-8 shadow-2xl">
+    <div class="flex items-start justify-between gap-4 flex-wrap mb-4">
+      <div>
+        <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Updates</h2>
+        <p class="text-sm text-slate-300">Pull the latest image for every service and recreate the containers.</p>
+        {% if compose_path %}
+        <p class="text-[11px] text-slate-500 mt-1">Runs in <code class="font-mono">{{ compose_path | replace('/docker-compose.yml','') }}</code></p>
+        {% endif %}
+      </div>
+      <button
+        hx-post="{{ url_for('dashboard.update_all') }}"
+        hx-target="#update-area"
+        hx-swap="outerHTML"
+        class="inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium bg-gradient-to-r from-violet-500 to-pink-500 text-white shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 transition text-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+        Update all
+      </button>
+    </div>
+
+    <div id="update-area">
+      {% include "_partials/dashboard_update.html" %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // After a "Restart" click, briefly flash success/failure on the row, then HTMX refreshes.
+  document.body.addEventListener("dashboard:restart-result", function (e) {
+    const row = document.getElementById("row-" + e.detail.name);
+    if (!row) return;
+    row.classList.add(e.detail.ok ? "ring-2" : "ring-2");
+    row.classList.add(e.detail.ok ? "ring-emerald-400/50" : "ring-rose-400/50");
+    setTimeout(() => {
+      row.classList.remove("ring-2", "ring-emerald-400/50", "ring-rose-400/50");
+    }, 1500);
+  });
+
+  // Bind restart buttons (delegated, since rows re-render every 3s)
+  document.body.addEventListener("click", async function (ev) {
+    const btn = ev.target.closest("[data-restart]");
+    if (!btn) return;
+    const name = btn.dataset.restart;
+    btn.disabled = true;
+    btn.textContent = "Restarting…";
+    try {
+      const fd = new FormData();
+      fd.append("name", name);
+      const r = await fetch("{{ url_for('dashboard.restart_container') }}", { method: "POST", body: fd });
+      const j = await r.json();
+      btn.textContent = j.ok ? "✓ Restarted" : "✗ Failed";
+      window.dispatchEvent(new CustomEvent("dashboard:restart-result", { detail: { name, ok: j.ok } }));
+      // Force the stats partial to refresh
+      htmx.trigger("#dashboard-stats", "every 3s");
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = "Restart";
+      }, 2000);
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = "Restart";
+    }
+  });
+</script>
+{% endblock %}

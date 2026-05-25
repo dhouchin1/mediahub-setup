@@ -8,6 +8,18 @@
        portsOpen: false,
        autoPasswords: {{ 'true' if auto_passwords else 'false' }},
        sharedPassword: '{{ shared_password | default('') }}',
+       enabled: {{ (enabled_services or []) | tojson }},
+       isEnabled(key) { return this.enabled.includes(key); },
+       toggle(key) {
+         const i = this.enabled.indexOf(key);
+         if (i === -1) {
+           this.enabled.push(key);
+           // Auto-enable jellyfin/sonarr/radarr deps for jellyseerr
+           if (key === 'jellyseerr' && !this.enabled.includes('jellyfin')) this.enabled.push('jellyfin');
+         } else {
+           this.enabled.splice(i, 1);
+         }
+       },
        async copyPassword() {
          try {
            await navigator.clipboard.writeText(this.sharedPassword);
@@ -155,6 +167,90 @@
       </p>
     </div>
 
+    <!-- Optional services -->
+    <div class="rounded-xl p-5 bg-slate-900/40 border border-slate-700/50 space-y-4">
+      <div>
+        <p class="text-sm font-medium text-slate-200">Optional services</p>
+        <p class="text-xs text-slate-400 mt-0.5">Add extras to your stack. You can change these later by re-running the wizard.</p>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-3">
+        {% for key, svc in optional_services.items() %}
+        <label class="flex items-start gap-3 rounded-lg p-3 bg-slate-900/40 border border-slate-700/40 hover:border-slate-600 cursor-pointer transition"
+               :class="isEnabled('{{ key }}') ? 'border-violet-500/60 bg-violet-500/5' : ''">
+          <input type="checkbox"
+                 name="enabled_services"
+                 value="{{ key }}"
+                 :checked="isEnabled('{{ key }}')"
+                 @change="toggle('{{ key }}')"
+                 class="mt-1 w-4 h-4 rounded border-slate-600 bg-slate-800 text-violet-500 focus:ring-violet-500 focus:ring-offset-0 cursor-pointer" />
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-slate-200">{{ svc.name }}</div>
+            <div class="text-xs text-slate-400 mt-0.5">{{ svc.role }}</div>
+            {% if svc.depends_on %}
+            <div class="text-[10px] text-slate-500 mt-1">
+              needs: {% for dep in svc.depends_on %}{{ dep }}{% if not loop.last %}, {% endif %}{% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </label>
+        {% endfor %}
+      </div>
+
+      <!-- Notifiarr / Telegram fields -->
+      <div x-show="isEnabled('notifiarr')" x-cloak class="space-y-3 pt-3 border-t border-slate-700/50">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wider text-emerald-300/80 mb-2">Notifiarr → Telegram</p>
+          <p class="text-xs text-slate-400 mb-3">Optional — leave blank to skip Telegram and configure Notifiarr manually later.</p>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-medium text-slate-300 mb-1 block">Bot token</label>
+            <input
+              type="text"
+              name="notifiarr_telegram_bot_token"
+              value="{{ notifiarr.telegram_bot_token if notifiarr else '' }}"
+              placeholder="123456:ABC-DEF…"
+              class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 font-mono text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 w-full"
+            />
+          </div>
+          <div>
+            <label class="text-xs font-medium text-slate-300 mb-1 block">Chat ID</label>
+            <input
+              type="text"
+              name="notifiarr_telegram_chat_id"
+              value="{{ notifiarr.telegram_chat_id if notifiarr else '' }}"
+              placeholder="-1001234567890"
+              class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 font-mono text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 w-full"
+            />
+          </div>
+        </div>
+        <p class="text-[11px] text-slate-500">
+          Need a bot? Message <a href="https://t.me/BotFather" target="_blank" rel="noopener" class="text-emerald-300 hover:text-emerald-200 underline">@BotFather</a> in Telegram, then forward a message to <a href="https://t.me/userinfobot" target="_blank" rel="noopener" class="text-emerald-300 hover:text-emerald-200 underline">@userinfobot</a> to get your chat ID.
+        </p>
+      </div>
+
+      <!-- Caddy domain field -->
+      <div x-show="isEnabled('caddy')" x-cloak class="space-y-3 pt-3 border-t border-slate-700/50">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wider text-sky-300/80 mb-2">Caddy reverse proxy</p>
+          <p class="text-xs text-slate-400 mb-3">All services accessible under one hostname. Local domains stay HTTP; public domains get auto-HTTPS via Let's Encrypt.</p>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-slate-300 mb-1 block">Hostname</label>
+          <input
+            type="text"
+            name="caddy_domain"
+            value="{{ caddy.domain if caddy else 'mediahub.local' }}"
+            placeholder="mediahub.local"
+            class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 font-mono text-xs focus:border-sky-500 focus:ring-1 focus:ring-sky-500 w-full"
+          />
+          <p class="text-[11px] text-slate-500 mt-1">
+            For <code>.local</code> domains, add an entry to <code>/etc/hosts</code> pointing to 127.0.0.1.
+          </p>
+        </div>
+      </div>
+    </div>
+
     <!-- Port overrides (collapsible) -->
     <div class="rounded-xl border border-slate-700/50 overflow-hidden">
       <button type="button"
@@ -176,16 +272,24 @@
           Only change these if the defaults conflict with software already running on this Mac.
         </p>
 
-        {% set port_fields = [
-          ("sonarr",          "Sonarr (TV)",            ports.sonarr         if ports is defined else 8989),
-          ("radarr",          "Radarr (Movies)",         ports.radarr         if ports is defined else 7878),
-          ("prowlarr",        "Prowlarr (Indexers)",     ports.prowlarr       if ports is defined else 9696),
-          ("qbittorrent_web", "qBittorrent Web UI",      ports.qbittorrent_web if ports is defined else 8080),
-          ("qbittorrent_bt",  "qBittorrent BT",          ports.qbittorrent_bt  if ports is defined else 6881),
+        {% set core_port_fields = [
+          ("sonarr",          "Sonarr (TV)",            8989, None),
+          ("radarr",          "Radarr (Movies)",         7878, None),
+          ("prowlarr",        "Prowlarr (Indexers)",     9696, None),
+          ("qbittorrent_web", "qBittorrent Web UI",      8080, None),
+          ("qbittorrent_bt",  "qBittorrent BT",           6881, None),
+        ] %}
+        {% set optional_port_fields = [
+          ("jellyfin",        "Jellyfin",                 8096, "jellyfin"),
+          ("jellyseerr",      "Jellyseerr",               5055, "jellyseerr"),
+          ("bazarr",          "Bazarr",                   6767, "bazarr"),
+          ("flaresolverr",    "Flaresolverr",             8191, "flaresolverr"),
+          ("notifiarr",       "Notifiarr",                5454, "notifiarr"),
+          ("caddy",           "Caddy",                    80,   "caddy"),
         ] %}
 
         <div class="grid sm:grid-cols-2 gap-4">
-          {% for svc, label, default_port in port_fields %}
+          {% for svc, label, default_port, enable_key in core_port_fields %}
           <div>
             <label for="port_{{ svc }}" class="text-sm font-medium text-slate-300 mb-1 block">
               {{ label }}
@@ -198,6 +302,27 @@
               max="65535"
               placeholder="{{ default_port }}"
               value="{{ ports[svc] if ports is defined and ports[svc] != default_port else '' }}"
+              class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 focus:border-violet-500 focus:ring-1 focus:ring-violet-500 w-full {% if errors['port_' ~ svc] %}border-rose-500{% endif %}"
+            />
+            {% if errors['port_' ~ svc] %}
+              <p class="text-rose-300 text-xs mt-1">{{ errors['port_' ~ svc] }}</p>
+            {% endif %}
+          </div>
+          {% endfor %}
+
+          {% for svc, label, default_port, enable_key in optional_port_fields %}
+          <div x-show="isEnabled('{{ enable_key }}')" x-cloak>
+            <label for="port_{{ svc }}" class="text-sm font-medium text-slate-300 mb-1 block">
+              {{ label }}
+            </label>
+            <input
+              id="port_{{ svc }}"
+              name="port_{{ svc }}"
+              type="number"
+              min="1"
+              max="65535"
+              placeholder="{{ default_port }}"
+              value="{{ ports[svc] if ports is defined and ports.get(svc) and ports[svc] != default_port else '' }}"
               class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 focus:border-violet-500 focus:ring-1 focus:ring-violet-500 w-full {% if errors['port_' ~ svc] %}border-rose-500{% endif %}"
             />
             {% if errors['port_' ~ svc] %}

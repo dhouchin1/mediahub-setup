@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}Repair / Resume — MediaHub Setup{% endblock %}
+
+{% block content %}
+<div class="glass rounded-3xl p-8 sm:p-10 shadow-2xl space-y-6">
+
+  <div>
+    <h1 class="text-3xl font-bold mb-2">Repair & resume</h1>
+    <p class="text-slate-400">
+      Here's everything mediahub-setup detected on this machine.
+      Pick up where you left off, retry failed wiring, or start fresh.
+    </p>
+  </div>
+
+  <!-- State summary -->
+  <div class="grid sm:grid-cols-2 gap-3">
+
+    <div class="rounded-xl p-4 bg-slate-900/40 border border-slate-700/50">
+      <div class="text-xs uppercase tracking-wider text-slate-500 mb-1">Drive</div>
+      {% if progress.drive %}
+        <div class="text-sm text-slate-200">
+          <span class="font-medium">{{ progress.drive.name }}</span>
+          <span class="text-slate-500"> · {{ progress.drive.filesystem }}</span>
+        </div>
+        <div class="text-xs text-slate-400 font-mono mt-0.5">{{ progress.drive.mount_path }}</div>
+      {% else %}
+        <div class="text-sm text-slate-500">Not selected yet</div>
+      {% endif %}
+    </div>
+
+    <div class="rounded-xl p-4 bg-slate-900/40 border border-slate-700/50">
+      <div class="text-xs uppercase tracking-wider text-slate-500 mb-1">Settings</div>
+      {% if progress.settings %}
+        <div class="text-sm text-slate-200">
+          {{ progress.settings.tz }} · PUID {{ progress.settings.puid }}
+        </div>
+        {% if progress.enabled_services %}
+        <div class="text-xs text-violet-300 mt-0.5">
+          + {{ progress.enabled_services | join(', ') }}
+        </div>
+        {% endif %}
+      {% else %}
+        <div class="text-sm text-slate-500">Not configured yet</div>
+      {% endif %}
+    </div>
+
+    <div class="rounded-xl p-4 bg-slate-900/40 border border-slate-700/50">
+      <div class="text-xs uppercase tracking-wider text-slate-500 mb-1">Compose</div>
+      {% if progress.compose_exists %}
+        <div class="text-sm text-emerald-300">✓ Rendered</div>
+        <div class="text-[11px] text-slate-500 font-mono truncate">{{ progress.compose_path }}</div>
+      {% else %}
+        <div class="text-sm text-slate-500">Not rendered yet</div>
+      {% endif %}
+    </div>
+
+    <div class="rounded-xl p-4 bg-slate-900/40 border border-slate-700/50">
+      <div class="text-xs uppercase tracking-wider text-slate-500 mb-1">Containers</div>
+      {% if progress.running_containers %}
+        <div class="text-sm text-emerald-300">{{ progress.running_containers | length }} running</div>
+        <div class="text-[11px] text-slate-500 mt-0.5">{{ progress.running_containers | join(', ') }}</div>
+      {% else %}
+        <div class="text-sm text-slate-500">None running</div>
+      {% endif %}
+    </div>
+
+  </div>
+
+  <!-- Wiring detail -->
+  <div class="rounded-xl p-5 bg-slate-900/40 border border-slate-700/50">
+    <div class="flex items-center justify-between mb-3">
+      <div>
+        <div class="text-xs uppercase tracking-wider text-slate-500">Wiring</div>
+        {% if progress.wiring_complete %}
+          <div class="text-sm text-emerald-300 font-medium mt-0.5">✓ Fully wired</div>
+        {% elif progress.missing_tasks %}
+          <div class="text-sm text-amber-300 font-medium mt-0.5">
+            {{ progress.missing_tasks | length }} task{{ 's' if progress.missing_tasks | length != 1 else '' }} pending
+          </div>
+        {% else %}
+          <div class="text-sm text-slate-500 font-medium mt-0.5">Not run yet</div>
+        {% endif %}
+      </div>
+      {% if not progress.wiring_complete and progress.compose_exists %}
+      <form method="post" action="{{ url_for('repair.rerun_wiring') }}">
+        <button class="text-xs px-4 py-2 rounded-lg bg-violet-500/20 text-violet-200 hover:bg-violet-500/30 transition">
+          Re-run wiring
+        </button>
+      </form>
+      {% endif %}
+    </div>
+
+    {% if progress.failed_tasks %}
+    <div class="mt-3">
+      <div class="text-[11px] uppercase tracking-wider text-rose-300/80 mb-2">Previously failed</div>
+      <ul class="space-y-1">
+        {% for t in progress.failed_tasks %}
+        <li class="text-xs text-rose-200 flex gap-2">
+          <span class="text-rose-400">✗</span>
+          <div>
+            <div>{{ t.name }}</div>
+            {% if t.message %}<div class="text-[10px] text-rose-400/80 font-mono">{{ t.message }}</div>{% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if progress.missing_tasks and not progress.failed_tasks %}
+    <div class="mt-3">
+      <div class="text-[11px] uppercase tracking-wider text-slate-500 mb-2">Pending</div>
+      <ul class="space-y-1">
+        {% for name in progress.missing_tasks[:6] %}
+        <li class="text-xs text-slate-400 flex gap-2">
+          <span class="text-slate-600">○</span>
+          {{ name }}
+        </li>
+        {% endfor %}
+        {% if progress.missing_tasks | length > 6 %}
+        <li class="text-[10px] text-slate-500">+ {{ progress.missing_tasks | length - 6 }} more…</li>
+        {% endif %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Actions -->
+  <div class="flex flex-wrap gap-3 pt-2">
+    <a href="{{ url_for(next_endpoint) }}"
+       class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-violet-500 to-pink-500 text-white font-medium shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 hover:scale-[1.02] transition transform text-sm">
+      {{ next_label }}
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+      </svg>
+    </a>
+
+    {% if progress.running_containers %}
+    <a href="{{ url_for('dashboard.index') }}"
+       class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-600/50 text-slate-100 font-medium transition text-sm">
+      Open dashboard
+    </a>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('repair.clear') }}"
+          onsubmit="return confirm('Wipe wizard state and start over? Containers will keep running.');">
+      <button class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-800/40 hover:bg-rose-500/20 border border-slate-700/50 hover:border-rose-500/30 text-slate-400 hover:text-rose-200 font-medium transition text-sm">
+        Start fresh
+      </button>
+    </form>
+  </div>
+
+</div>
+{% endblock %}

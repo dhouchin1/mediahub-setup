@@ -41,14 +41,14 @@
         <li class="flex items-start gap-2">
           <span class="mt-0.5 w-4 h-4 rounded-full bg-violet-500/20 text-violet-300 text-[10px] flex items-center justify-center flex-shrink-0">D</span>
           <span>
-            <span class="text-slate-100 font-medium">{{ drive.mount }}/media/</span>
+            <span class="text-slate-100 font-medium">{{ drive.mount_path }}/media/</span>
             <span class="text-slate-400"> — movies &amp; TV folders</span>
           </span>
         </li>
         <li class="flex items-start gap-2">
           <span class="mt-0.5 w-4 h-4 rounded-full bg-violet-500/20 text-violet-300 text-[10px] flex items-center justify-center flex-shrink-0">D</span>
           <span>
-            <span class="text-slate-100 font-medium">{{ drive.mount }}/torrents/</span>
+            <span class="text-slate-100 font-medium">{{ drive.mount_path }}/torrents/</span>
             <span class="text-slate-400"> — download staging folders</span>
           </span>
         </li>
@@ -57,11 +57,11 @@
 
     <div class="rounded-2xl border border-slate-700/50 bg-slate-900/40 p-5">
       <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-3">Containers</div>
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
         {% for svc in services %}
         <div class="rounded-xl bg-slate-800/60 px-3 py-2 text-center">
           <div class="text-sm font-medium text-slate-100">{{ svc.label }}</div>
-          <div class="text-xs text-slate-400">:{{ settings.ports[svc.port_key] }}</div>
+          <div class="text-xs text-slate-400">:{{ settings.ports.get(svc.port_key, '') }}</div>
         </div>
         {% endfor %}
       </div>
@@ -80,7 +80,7 @@
         </div>
         <div>
           <dt class="text-slate-500 text-xs">Drive</dt>
-          <dd class="text-slate-200 truncate">{{ drive.mount }}</dd>
+          <dd class="text-slate-200 truncate">{{ drive.mount_path }}</dd>
         </div>
       </dl>
     </div>

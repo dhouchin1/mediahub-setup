@@ -7,12 +7,23 @@ import secrets
 from pathlib import Path
 
 DEFAULT_PORTS: dict[str, int] = {
+    # Core (always installed)
     "sonarr": 8989,
     "radarr": 7878,
     "prowlarr": 9696,
     "qbittorrent_web": 8080,
     "qbittorrent_bt": 6881,
+    # Optional services (only used when enabled in settings)
+    "jellyfin": 8096,
+    "jellyseerr": 5055,
+    "bazarr": 6767,
+    "flaresolverr": 8191,
+    "notifiarr": 5454,
+    "caddy": 80,
 }
+
+# Ports that always need to be free / always rendered in compose.
+CORE_PORT_KEYS = ["sonarr", "radarr", "prowlarr", "qbittorrent_web", "qbittorrent_bt"]
 
 # Characters that look alike (0/O, 1/l/I) are excluded for readability.
 _AMBIGUOUS = set("0O1lI")

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from flask import Blueprint, redirect, render_template, request, url_for
 
-from .. import state
+from .. import services, state
 from ..system_settings import (
     DEFAULT_PORTS,
     detect_gid,
@@ -18,6 +18,9 @@ def _default_form() -> dict:
     """Return form defaults, preferring previously-saved state."""
     saved = state.get("settings") or {}
     ports = saved.get("ports", DEFAULT_PORTS)
+    enabled = saved.get("enabled_services") or []
+    notifiarr_cfg = saved.get("notifiarr") or {}
+    caddy_cfg = saved.get("caddy") or {}
     return {
         "tz": saved.get("tz") or detect_tz(),
         "puid": saved.get("puid", detect_uid()),
@@ -25,6 +28,13 @@ def _default_form() -> dict:
         "ports": {k: ports.get(k, DEFAULT_PORTS[k]) for k in DEFAULT_PORTS},
         "auto_passwords": saved.get("auto_passwords", True),
         "shared_password": saved.get("shared_password") or generate_password(),
+        "enabled_services": enabled,
+        "optional_services": services.OPTIONAL,
+        "notifiarr": {
+            "telegram_bot_token": notifiarr_cfg.get("telegram_bot_token", ""),
+            "telegram_chat_id": notifiarr_cfg.get("telegram_chat_id", ""),
+        },
+        "caddy": {"domain": caddy_cfg.get("domain", "mediahub.local")},
     }
 
 
@@ -51,8 +61,10 @@ def _validate(form: dict) -> dict[str, str]:
             continue  # not overridden — use default
         try:
             port = int(raw)
-            if not (1024 <= port <= 65535):
-                errors[key] = "Port must be between 1024 and 65535."
+            # Privileged ports (1-1023) are allowed for Caddy (80/443) when
+            # using Docker Desktop or OrbStack, which handle the binding.
+            if not (1 <= port <= 65535):
+                errors[key] = "Port must be between 1 and 65535."
         except (TypeError, ValueError):
             errors[key] = "Must be a valid port number."
 
@@ -75,6 +87,10 @@ def submit():
     f = request.form
 
     auto_passwords = "auto_passwords" in f
+
+    # Resolve enabled optional services (auto-add prerequisites)
+    raw_enabled = f.getlist("enabled_services")
+    enabled = services.resolve_dependencies([k for k in raw_enabled if k in services.OPTIONAL])
 
     # Rebuild a form dict for re-rendering on error
     port_overrides: dict[str, int | str] = {}
@@ -113,6 +129,13 @@ def submit():
                 auto_passwords=form_data["auto_passwords"],
                 shared_password=form_data["shared_password"],
                 ports=form_data["ports"],
+                enabled_services=enabled,
+                optional_services=services.OPTIONAL,
+                notifiarr={
+                    "telegram_bot_token": f.get("notifiarr_telegram_bot_token", "").strip(),
+                    "telegram_chat_id": f.get("notifiarr_telegram_chat_id", "").strip(),
+                },
+                caddy={"domain": f.get("caddy_domain", "mediahub.local").strip()},
             ),
             422,
         )
@@ -132,6 +155,12 @@ def submit():
             "ports": final_ports,
             "auto_passwords": auto_passwords,
             "shared_password": form_data["shared_password"] if auto_passwords else None,
+            "enabled_services": enabled,
+            "notifiarr": {
+                "telegram_bot_token": f.get("notifiarr_telegram_bot_token", "").strip(),
+                "telegram_chat_id": f.get("notifiarr_telegram_chat_id", "").strip(),
+            },
+            "caddy": {"domain": f.get("caddy_domain", "mediahub.local").strip()},
         },
     )
 

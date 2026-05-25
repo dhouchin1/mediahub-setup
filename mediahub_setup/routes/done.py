@@ -1,8 +1,58 @@
 from flask import Blueprint, redirect, render_template, url_for
 
-from mediahub_setup import state
+from mediahub_setup import services, state
 
 bp = Blueprint("done", __name__, url_prefix="/done")
+
+
+def _service_card(
+    key: str,
+    ports: dict,
+    api_keys: dict,
+    qb_creds: dict,
+    shared_password: str,
+) -> dict | None:
+    """Build the dict consumed by done.html for one service."""
+    svc = services.ALL.get(key)
+    if not svc:
+        return None
+
+    port_key = svc.get("port_key") or ""
+    if not port_key:
+        return None  # CLI tools (Recyclarr) have no port
+
+    port = ports.get(port_key, svc.get("default_port", 0))
+    if not port:
+        return None
+    url_path = svc.get("url_path", "/")
+    url = f"http://localhost:{port}{url_path}"
+
+    auth = svc.get("auth", "shared_password")
+    username: str | None = None
+    password: str | None = None
+    api_key: str | None = api_keys.get(key)
+
+    if auth == "shared_password":
+        password = shared_password
+        if key == "qbittorrent":
+            username = qb_creds.get("username", "admin")
+            password = qb_creds.get("password", shared_password)
+    elif auth == "first_run_setup":
+        password = None  # user sets it in the web UI
+    elif auth == "api_key_only":
+        password = None
+
+    return {
+        "key": key,
+        "name": svc.get("name", key),
+        "role": svc.get("role", ""),
+        "url": url,
+        "username": username,
+        "password": password,
+        "api_key": api_key,
+        "color": svc.get("color", "violet"),
+        "auth": auth,
+    }
 
 
 @bp.get("/")
@@ -14,9 +64,19 @@ def index():
 
     ports = settings.get("ports") or {}
     shared_password = settings.get("shared_password", "")
+    enabled = settings.get("enabled_services") or []
 
     api_keys = wiring.get("api_keys") or {}
     qb_creds = wiring.get("qb_credentials") or {}
+
+    # Always-on core services first, then optional ones in catalog order.
+    keys_in_order = services.core_keys() + [k for k in services.optional_keys() if k in enabled]
+
+    svc_cards: list[dict] = []
+    for key in keys_in_order:
+        card = _service_card(key, ports, api_keys, qb_creds, shared_password)
+        if card:
+            svc_cards.append(card)
 
     def url(service: str) -> str:
         port_map = {
@@ -27,50 +87,17 @@ def index():
         }
         return f"http://localhost:{port_map[service]}"
 
-    services = [
-        {
-            "name": "Sonarr",
-            "role": "TV series manager",
-            "url": url("sonarr"),
-            "username": None,
-            "password": shared_password,
-            "api_key": api_keys.get("sonarr", ""),
-            "color": "blue",
-        },
-        {
-            "name": "Radarr",
-            "role": "Movie manager",
-            "url": url("radarr"),
-            "username": None,
-            "password": shared_password,
-            "api_key": api_keys.get("radarr", ""),
-            "color": "amber",
-        },
-        {
-            "name": "Prowlarr",
-            "role": "Indexer manager",
-            "url": url("prowlarr"),
-            "username": None,
-            "password": shared_password,
-            "api_key": api_keys.get("prowlarr", ""),
-            "color": "violet",
-        },
-        {
-            "name": "qBittorrent",
-            "role": "Download client",
-            "url": url("qbittorrent"),
-            "username": qb_creds.get("username", "admin"),
-            "password": qb_creds.get("password", shared_password),
-            "api_key": None,
-            "color": "cyan",
-        },
-    ]
-
     ctx = {
         "step": "done",
-        "services": services,
+        "services": svc_cards,
         "radarr_url": url("radarr"),
         "sonarr_url": url("sonarr"),
+        "jellyseerr_enabled": "jellyseerr" in enabled,
+        "jellyseerr_url": f"http://localhost:{ports.get('jellyseerr', 5055)}/",
+        "jellyfin_enabled": "jellyfin" in enabled,
+        "jellyfin_url": f"http://localhost:{ports.get('jellyfin', 8096)}/web/",
+        "notifiarr_enabled": "notifiarr" in enabled,
+        "notifiarr_url": f"http://localhost:{ports.get('notifiarr', 5454)}/",
         "mount_path": drive.get("mount_path", ""),
         "compose_path": install.get("compose_path", ""),
     }
