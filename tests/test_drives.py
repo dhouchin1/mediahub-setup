@@ -7,11 +7,16 @@ a structural smoke test (it must never raise).
 
 from __future__ import annotations
 
+import collections
+import json
 import plistlib
 
 import pytest
 
+from mediahub_setup import drives
 from mediahub_setup.drives import DriveInfo, _parse_diskutil_plist, fmt_gb
+
+_Usage = collections.namedtuple("usage", ["total", "used", "free"])
 
 # ---------------------------------------------------------------------------
 # Minimal valid plist produced by `diskutil list -plist external`
@@ -223,3 +228,145 @@ class TestListDrivesSmokeTest:
             assert isinstance(d, DriveInfo)
             assert d.mount_path
             assert d.name
+
+
+# ---------------------------------------------------------------------------
+# Linux backend (lsblk JSON parsing + /proc/mounts helpers)
+# ---------------------------------------------------------------------------
+
+# A typical VPS: root disk vda1 at "/", an attached data volume sdb at
+# /mnt/data, a cdrom, and a squashfs snap loop. Only /mnt/data is a usable
+# media drive.
+SAMPLE_LSBLK = {
+    "blockdevices": [
+        {
+            "name": "/dev/vda",
+            "type": "disk",
+            "size": 27000000000,
+            "fstype": None,
+            "mountpoint": None,
+            "rm": False,
+            "ro": False,
+            "label": None,
+            "children": [
+                {
+                    "name": "/dev/vda1",
+                    "type": "part",
+                    "size": 26000000000,
+                    "fstype": "ext4",
+                    "mountpoint": "/",
+                    "rm": False,
+                    "ro": False,
+                    "label": "cloudimg-rootfs",
+                }
+            ],
+        },
+        {
+            "name": "/dev/sdb",
+            "type": "disk",
+            "size": 500000000000,
+            "fstype": "ext4",
+            "mountpoint": "/mnt/data",
+            "rm": False,
+            "ro": False,
+            "label": "data",
+        },
+        {
+            "name": "/dev/sr0",
+            "type": "rom",
+            "size": 0,
+            "fstype": None,
+            "mountpoint": None,
+            "rm": True,
+            "ro": True,
+            "label": None,
+        },
+        {
+            "name": "/dev/loop0",
+            "type": "loop",
+            "size": 100000000,
+            "fstype": "squashfs",
+            "mountpoint": "/snap/core/1",
+            "rm": False,
+            "ro": True,
+            "label": None,
+        },
+    ]
+}
+
+
+class TestParseLsblk:
+    @pytest.fixture(autouse=True)
+    def _stub_fs(self, monkeypatch):
+        # Decouple from the test machine's real filesystem.
+        monkeypatch.setattr(drives, "_detect_writable", lambda m, fs: True)
+        monkeypatch.setattr(
+            drives.shutil,
+            "disk_usage",
+            lambda p: _Usage(500_000_000_000, 100_000_000_000, 400_000_000_000),
+        )
+
+    def test_keeps_only_the_data_mount(self):
+        result = drives._parse_lsblk(SAMPLE_LSBLK)
+        assert [d.mount_path for d in result] == ["/mnt/data"]
+
+    def test_drive_metadata(self):
+        d = drives._parse_lsblk(SAMPLE_LSBLK)[0]
+        assert d.name == "data"
+        assert d.filesystem == "ext4"
+        assert d.writable is True
+        assert d.free_bytes == 400_000_000_000
+
+    def test_root_and_virtual_filesystems_are_skipped(self):
+        mounts = [d.mount_path for d in drives._parse_lsblk(SAMPLE_LSBLK)]
+        assert "/" not in mounts
+        assert "/snap/core/1" not in mounts
+
+    def test_empty_blockdevices_returns_empty(self):
+        assert drives._parse_lsblk({"blockdevices": []}) == []
+
+    def test_list_drives_dispatches_to_linux(self, monkeypatch):
+        monkeypatch.setattr(drives.platform_detect, "is_linux", lambda: True)
+        monkeypatch.setattr(drives, "_run_lsblk", lambda: json.dumps(SAMPLE_LSBLK))
+        result = drives.list_drives()
+        assert [d.mount_path for d in result] == ["/mnt/data"]
+
+    def test_linux_falls_back_to_proc_mounts_without_lsblk(self, monkeypatch):
+        monkeypatch.setattr(drives.platform_detect, "is_linux", lambda: True)
+        monkeypatch.setattr(drives, "_run_lsblk", lambda: "")
+        called = {}
+
+        def _fake_proc():
+            called["hit"] = True
+            return []
+
+        monkeypatch.setattr(drives, "_list_drives_proc_mounts", _fake_proc)
+        drives.list_drives()
+        assert "hit" in called
+
+
+class TestLinuxMountHelpers:
+    def test_skippable_mounts(self):
+        for m in ("/", "/boot", "/proc", "/sys/fs/cgroup", "/dev/shm", "[SWAP]", ""):
+            assert drives._is_skippable_linux_mount(m) is True
+
+    def test_usable_mounts_not_skipped(self):
+        for m in ("/mnt/data", "/srv/media", "/data"):
+            assert drives._is_skippable_linux_mount(m) is False
+
+    def test_unescape_proc_mount_spaces(self):
+        assert drives._unescape_proc_mount("/mnt/my\\040disk") == "/mnt/my disk"
+
+
+class TestDriveFromPath:
+    def test_accepts_existing_writable_dir(self, tmp_path):
+        d = drives.drive_from_path(str(tmp_path))
+        assert d is not None
+        assert d.mount_path == str(tmp_path)
+        assert d.writable is True
+
+    def test_rejects_missing_dir(self, tmp_path):
+        assert drives.drive_from_path(str(tmp_path / "does-not-exist")) is None
+
+    def test_rejects_empty(self):
+        assert drives.drive_from_path("") is None

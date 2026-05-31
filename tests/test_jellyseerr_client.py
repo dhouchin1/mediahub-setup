@@ -43,7 +43,7 @@ def test_jellyseerr_client_init_sets_base_url():
 
 
 def test_wait_until_ready_raises_on_timeout():
-    """wait_until_ready must raise RuntimeError when Jellyseerr never responds."""
+    """wait_until_ready must raise RuntimeError when the server never responds."""
     client = JellyseerrClient("http://localhost:5055")
     with patch.object(
         client._session,
@@ -51,7 +51,9 @@ def test_wait_until_ready_raises_on_timeout():
         side_effect=requests.ConnectionError("refused"),
     ):
         with patch("time.sleep"):
-            with pytest.raises(RuntimeError, match="Jellyseerr"):
+            # The shared RequestAppClient raises "Request app did not respond …"
+            # since Overseerr and Jellyseerr share one implementation now.
+            with pytest.raises(RuntimeError, match="did not respond"):
                 client.wait_until_ready(timeout=1)
 
 

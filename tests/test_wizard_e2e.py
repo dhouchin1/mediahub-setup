@@ -32,6 +32,87 @@ def test_welcome_renders(client):
     assert r.status_code == 200
 
 
+def test_welcome_offers_all_three_roles(client):
+    body = client.get("/").data.decode()
+    assert "All-in-one" in body
+    assert "Remote seedbox" in body
+    assert "Home receiver" in body
+
+
+def test_choose_role_persists_and_advances_to_preflight(client):
+    r = client.post("/role", data={"role": "seedbox"})
+    assert r.status_code == 303
+    assert "/preflight" in r.headers["Location"]
+    assert state.get("role") == "seedbox"
+
+
+def test_receiver_skips_wiring_step(client):
+    """The receiver has no *arr to wire, so /wiring/ redirects to Done."""
+    state.set("role", "receiver")
+    r = client.get("/wiring/")
+    assert r.status_code in (301, 302, 303, 308)
+    assert "/done" in r.headers["Location"]
+
+
+def test_receiver_settings_show_syncthing_and_hide_qbittorrent(client):
+    state.set("role", "receiver")
+    body = client.get("/settings/").data.decode()
+    assert "Syncthing library sync" in body
+    assert "qBittorrent username" not in body
+
+
+def test_seedbox_settings_force_enables_syncthing(client):
+    """Submitting settings as a seedbox always enables Syncthing."""
+    state.set("role", "seedbox")
+    r = client.post("/settings/", data={"tz": "UTC", "puid": "501", "pgid": "20"})
+    assert r.status_code in (302, 303)
+    saved = state.get("settings") or {}
+    assert "syncthing" in (saved.get("enabled_services") or [])
+    assert saved.get("role") == "seedbox"
+
+
+def test_done_renders_seedbox_syncthing_device_id(client):
+    state.set("role", "seedbox")
+    state.set("settings", {"role": "seedbox", "ports": {}, "enabled_services": ["syncthing"]})
+    state.set(
+        "wiring",
+        {
+            "status": "complete",
+            "syncthing": {
+                "device_id": "ABCDEFG-HIJKLMN",
+                "folder_id": "mediahub-media",
+                "folder_type": "sendonly",
+            },
+        },
+    )
+    r = client.get("/done/")
+    assert r.status_code == 200
+    body = r.data.decode()
+    assert "Syncthing" in body
+    assert "ABCDEFG-HIJKLMN" in body  # this node's device ID is surfaced
+
+
+def test_done_renders_receiver_versioning_warning(client):
+    state.set("role", "receiver")
+    state.set("settings", {"role": "receiver", "ports": {}, "enabled_services": ["syncthing"]})
+    state.set(
+        "wiring",
+        {
+            "status": "complete",
+            "syncthing": {
+                "device_id": "XYZ1234-RECEIVER",
+                "folder_id": "mediahub-media",
+                "folder_type": "receiveonly",
+            },
+        },
+    )
+    r = client.get("/done/")
+    assert r.status_code == 200
+    body = r.data.decode()
+    assert "versioning" in body.lower()  # the P0 deletion-safety warning
+    assert "Add your first movie" not in body  # no *arr CTA on a receiver
+
+
 def test_preflight_renders_and_rerun_is_partial(client):
     r = client.get("/preflight/")
     assert r.status_code == 200

@@ -12,7 +12,7 @@ import webbrowser
 import click
 from waitress import serve
 
-from . import __version__
+from . import __version__, roles, state
 from .app import create_app
 
 
@@ -42,9 +42,20 @@ def find_free_port(start: int = 7842, span: int = 100) -> int:
     is_flag=True,
     help="Don't auto-open the browser. Print the URL instead.",
 )
+@click.option(
+    "--role",
+    type=click.Choice(["all-in-one", "seedbox", "receiver"]),
+    default=None,
+    help=(
+        "Deployment role: all-in-one (default, everything on this machine), "
+        "seedbox (remote VPS download stack), or receiver (home sync target)."
+    ),
+)
 @click.version_option(__version__, prog_name="mediahub-setup")
-def main(port: int | None, no_browser: bool) -> None:
+def main(port: int | None, no_browser: bool, role: str | None) -> None:
     """MediaHub Setup — web wizard for a self-hosted *arr stack."""
+    if role:
+        state.set("role", roles.normalize(role))
     port = port or find_free_port()
     url = f"http://localhost:{port}/"
 

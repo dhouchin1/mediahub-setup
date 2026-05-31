@@ -80,8 +80,8 @@ QBITTORRENT: ServiceDef = {
     "image": "lscr.io/linuxserver/qbittorrent:latest",
     "container_name": "mediahub-qbittorrent",
     "port_key": "qbittorrent_web",
-    "default_port": 8080,
-    "internal_port": 8080,
+    "default_port": 8090,
+    "internal_port": 8090,
     "color": "cyan",
     "url_path": "/",
     "auth": "shared_password",
@@ -109,19 +109,51 @@ JELLYFIN: ServiceDef = {
     "depends_on": [],
 }
 
+OVERSEERR: ServiceDef = {
+    "name": "Overseerr",
+    "role": "Request UI for movies & TV",
+    "image": "sctx/overseerr:latest",
+    "container_name": "mediahub-overseerr",
+    "port_key": "overseerr",
+    "default_port": 5055,
+    "internal_port": 5055,
+    "color": "orange",
+    "url_path": "/",
+    "auth": "first_run_setup",
+    "core": False,
+    "depends_on": ["sonarr", "radarr"],
+}
+
+# Kept for users who specifically want the Jellyfin-flavoured fork.
+# Same API as Overseerr (Jellyseerr is a fork of Overseerr).
 JELLYSEERR: ServiceDef = {
     "name": "Jellyseerr",
-    "role": "Request UI for movies & TV",
+    "role": "Request UI for movies & TV (Jellyfin fork)",
     "image": "fallenbagel/jellyseerr:latest",
     "container_name": "mediahub-jellyseerr",
     "port_key": "jellyseerr",
-    "default_port": 5055,
+    "default_port": 5056,
     "internal_port": 5055,
     "color": "indigo",
     "url_path": "/",
     "auth": "first_run_setup",
     "core": False,
     "depends_on": ["jellyfin", "sonarr", "radarr"],
+}
+
+WEB: ServiceDef = {
+    "name": "MediaHub Web",
+    "role": "Custom Next.js dashboard with status, request, and library views",
+    "image": "ghcr.io/dhouchin1/mediahub-web:latest",
+    "container_name": "mediahub-web",
+    "port_key": "web",
+    "default_port": 3000,
+    "internal_port": 3000,
+    "color": "teal",
+    "url_path": "/",
+    "auth": "none",
+    "core": False,
+    "depends_on": ["sonarr", "radarr"],
 }
 
 BAZARR: ServiceDef = {
@@ -199,6 +231,36 @@ CADDY: ServiceDef = {
     "depends_on": [],
 }
 
+SYNCTHING: ServiceDef = {
+    "name": "Syncthing",
+    "role": "Library sync between a seedbox and home",
+    "image": "syncthing/syncthing:latest",
+    "container_name": "mediahub-syncthing",
+    "port_key": "syncthing",
+    "default_port": 8384,
+    "internal_port": 8384,
+    "color": "teal",
+    "url_path": "/",
+    "auth": "first_run_setup",
+    "core": False,
+    "depends_on": [],
+}
+
+GLUETUN: ServiceDef = {
+    "name": "Gluetun VPN",
+    "role": "Routes qBittorrent traffic through a VPN",
+    "image": "qmcgaw/gluetun:latest",
+    "container_name": "mediahub-gluetun",
+    "port_key": "",  # no UI of its own — it fronts qBittorrent's ports
+    "default_port": 0,
+    "internal_port": 0,
+    "color": "rose",
+    "url_path": "",
+    "auth": "none",
+    "core": False,
+    "depends_on": [],
+}
+
 
 # ---------------------------------------------------------------------------
 # Catalog
@@ -214,12 +276,16 @@ CORE: dict[str, ServiceDef] = {
 
 OPTIONAL: dict[str, ServiceDef] = {
     "jellyfin": JELLYFIN,
+    "overseerr": OVERSEERR,
     "jellyseerr": JELLYSEERR,
     "bazarr": BAZARR,
+    "web": WEB,
     "flaresolverr": FLARESOLVERR,
     "notifiarr": NOTIFIARR,
     "recyclarr": RECYCLARR,
     "caddy": CADDY,
+    "syncthing": SYNCTHING,
+    "gluetun": GLUETUN,
 }
 
 ALL: dict[str, ServiceDef] = {**CORE, **OPTIONAL}

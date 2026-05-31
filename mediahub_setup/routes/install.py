@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from flask import Blueprint, flash, redirect, render_template, url_for
 
-from .. import installer, services, state
+from .. import installer, roles, services, state
 
 bp = Blueprint("install", __name__, url_prefix="/install")
 
@@ -17,10 +17,15 @@ CORE_SERVICES = [
 ]
 
 
+def _role(settings: dict | None) -> str:
+    return roles.normalize((settings or {}).get("role"))
+
+
 def _services_for_settings(settings: dict | None) -> list[dict]:
     """Build the SERVICES list shown in the install UI, adding optional ones
-    based on the current settings.enabled_services."""
-    out = list(CORE_SERVICES)
+    based on the current settings.enabled_services. The core *arr stack is
+    omitted for roles that don't install it (the receiver)."""
+    out = list(CORE_SERVICES) if roles.installs_arr(_role(settings)) else []
     enabled = (settings or {}).get("enabled_services") or []
     for key in enabled:
         if key == "recyclarr":
@@ -86,7 +91,9 @@ def start():
 
     # Prepare filesystem
     install_dir = installer.prepare_install_dir()
-    installer.prepare_media_layout(drive["mount_path"])
+    installer.prepare_media_layout(
+        drive["mount_path"], include_torrents=roles.installs_arr(_role(settings))
+    )
     installer.render_compose(install_dir, settings)
     installer.render_env(install_dir, drive, settings)
 
@@ -107,7 +114,9 @@ def retry():
     settings = state.get("settings")
 
     install_dir = installer.prepare_install_dir()
-    installer.prepare_media_layout(drive["mount_path"])
+    installer.prepare_media_layout(
+        drive["mount_path"], include_torrents=roles.installs_arr(_role(settings))
+    )
     installer.render_compose(install_dir, settings)
     installer.render_env(install_dir, drive, settings)
     installer.start_install(install_dir, drive, settings)

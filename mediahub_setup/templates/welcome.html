@@ -54,18 +54,37 @@
       </div>
     </div>
 
-    <div class="flex items-center justify-between">
-      <p class="text-xs text-slate-500">
-        Nothing changes on your system until the Install step.
-      </p>
-      <a href="{{ url_for('preflight.index') }}"
-         class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-violet-500 to-pink-500 text-white font-medium shadow-lg shadow-violet-500/40 hover:shadow-violet-500/60 hover:scale-[1.02] transition transform">
-        Get started
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
-        </svg>
-      </a>
+    <div class="mb-3 text-violet-300 text-xs font-semibold uppercase tracking-wider">
+      How do you want to deploy?
     </div>
+    <div class="grid sm:grid-cols-3 gap-3 mb-6">
+      {% set role_cards = [
+        ('all_in_one', 'All-in-one', 'Download, organise and play everything on this one machine.', '🖥️'),
+        ('seedbox', 'Remote seedbox', 'Run the download stack on a VPS and Syncthing the library home.', '☁️'),
+        ('receiver', 'Home receiver', 'Receive the synced library from a seedbox and play it locally.', '📥'),
+      ] %}
+      {% for key, title, blurb, icon in role_cards %}
+      <form method="POST" action="{{ url_for('welcome.choose_role') }}" class="h-full">
+        <input type="hidden" name="role" value="{{ key }}">
+        <button type="submit"
+          class="group h-full w-full text-left rounded-xl p-4 border transition
+                 {% if current_role == key %}border-violet-500/60 bg-violet-500/10
+                 {% else %}border-slate-700/50 bg-slate-900/40 hover:border-violet-500/40 hover:bg-slate-900/70{% endif %}">
+          <div class="text-2xl mb-2">{{ icon }}</div>
+          <div class="text-sm font-semibold text-slate-100 mb-1 flex items-center gap-1.5">
+            {{ title }}
+            {% if key == 'all_in_one' %}<span class="text-[10px] font-normal text-slate-400">(default)</span>{% endif %}
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">{{ blurb }}</p>
+        </button>
+      </form>
+      {% endfor %}
+    </div>
+
+    <p class="text-xs text-slate-500">
+      Pick a deployment style to continue. Nothing changes on your system until the Install step.
+      New to this? Start with <strong class="text-slate-400">All-in-one</strong>.
+    </p>
   </div>
 </div>
 {% endblock %}

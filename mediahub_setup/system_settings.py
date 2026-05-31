@@ -11,15 +11,18 @@ DEFAULT_PORTS: dict[str, int] = {
     "sonarr": 8989,
     "radarr": 7878,
     "prowlarr": 9696,
-    "qbittorrent_web": 8080,
+    "qbittorrent_web": 8090,
     "qbittorrent_bt": 6881,
     # Optional services (only used when enabled in settings)
     "jellyfin": 8096,
-    "jellyseerr": 5055,
+    "overseerr": 5055,
+    "jellyseerr": 5056,
     "bazarr": 6767,
+    "web": 3000,
     "flaresolverr": 8191,
     "notifiarr": 5454,
     "caddy": 80,
+    "syncthing": 8384,
 }
 
 # Ports that always need to be free / always rendered in compose.

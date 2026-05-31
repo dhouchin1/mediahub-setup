@@ -116,6 +116,132 @@ def test_render_compose_creates_parent_dir(tmp_path):
     assert out.exists()
 
 
+def test_render_compose_seedbox_keeps_arr(tmp_path):
+    """The seedbox role installs the full *arr acquisition stack."""
+    text = installer.render_compose(tmp_path, {**SAMPLE_SETTINGS, "role": "seedbox"}).read_text()
+    assert "mediahub-sonarr" in text
+    assert "mediahub-qbittorrent" in text
+    assert "8989:8989" in text
+
+
+def test_render_compose_receiver_omits_arr(tmp_path):
+    """The receiver role holds only the synced library — no *arr stack."""
+    text = installer.render_compose(tmp_path, {**SAMPLE_SETTINGS, "role": "receiver"}).read_text()
+    assert "mediahub-sonarr" not in text
+    assert "mediahub-radarr" not in text
+    assert "mediahub-prowlarr" not in text
+    assert "mediahub-qbittorrent" not in text
+
+
+def _settings_with_syncthing(**extra):
+    return {
+        **SAMPLE_SETTINGS,
+        "enabled_services": ["syncthing"],
+        "ports": {**SAMPLE_SETTINGS["ports"], "syncthing": 8384},
+        **extra,
+    }
+
+
+def test_render_compose_syncthing_shares_media_only(tmp_path):
+    """Syncthing mounts ONLY the Media subtree and publishes its sync ports."""
+    text = installer.render_compose(tmp_path, _settings_with_syncthing()).read_text()
+    assert "mediahub-syncthing" in text
+    assert "${MEDIA_ROOT}/Media:/data/Media" in text
+    assert "22000:22000/tcp" in text
+    assert "21027:21027/udp" in text
+    # The Syncthing service block must never mount the Torrents subtree.
+    block = text[text.index("  syncthing:") :]
+    block = block[: block.index("restart: unless-stopped")]
+    assert "/data/Torrents" not in block
+
+
+def test_render_compose_seedbox_loopback_binds_syncthing_gui(tmp_path):
+    """On a seedbox the GUI binds to loopback (reached over Tailscale)."""
+    text = installer.render_compose(tmp_path, _settings_with_syncthing(role="seedbox")).read_text()
+    assert "127.0.0.1:8384:8384" in text
+
+
+def test_render_compose_all_in_one_does_not_loopback_bind(tmp_path):
+    """All-in-one keeps 0.0.0.0 binding (LAN access) — no 127.0.0.1 prefix."""
+    text = installer.render_compose(tmp_path, _settings_with_syncthing()).read_text()
+    assert "127.0.0.1:8384" not in text
+    assert "8384:8384" in text
+
+
+def test_render_compose_seedbox_loopback_binds_all_web_uis(tmp_path):
+    """On a seedbox every published web UI binds to loopback; torrent ports don't."""
+    text = installer.render_compose(tmp_path, {**SAMPLE_SETTINGS, "role": "seedbox"}).read_text()
+    assert "127.0.0.1:8989:8989" in text  # sonarr
+    assert "127.0.0.1:7878:7878" in text  # radarr
+    assert "127.0.0.1:9696:9696" in text  # prowlarr
+    assert "127.0.0.1:8080:8080" in text  # qbittorrent web (SAMPLE uses 8080)
+    # The BitTorrent port must stay public so peers can connect.
+    assert "127.0.0.1:6881" not in text
+    assert "6881:6881" in text
+
+
+def test_render_compose_all_in_one_has_no_loopback_anywhere(tmp_path):
+    """The default role never loopback-binds — preserves LAN access."""
+    text = installer.render_compose(tmp_path, SAMPLE_SETTINGS).read_text()
+    assert "127.0.0.1:" not in text
+
+
+def _qbittorrent_block(text: str) -> str:
+    start = text.index("  qbittorrent:")
+    return text[start : text.index("restart: unless-stopped", start)]
+
+
+def _settings_with_gluetun(**extra):
+    return {
+        **SAMPLE_SETTINGS,
+        "enabled_services": ["gluetun"],
+        "gluetun": {
+            "provider": "mullvad",
+            "vpn_type": "wireguard",
+            "wireguard_private_key": "PRIVKEY",
+            "wireguard_addresses": "10.64.0.2/32",
+            "port_forwarding": True,
+        },
+        **extra,
+    }
+
+
+def test_render_compose_gluetun_routes_qbittorrent_through_vpn(tmp_path):
+    text = installer.render_compose(tmp_path, _settings_with_gluetun()).read_text()
+    assert "mediahub-gluetun" in text
+    assert 'network_mode: "service:gluetun"' in text
+    assert "${WIREGUARD_PRIVATE_KEY}" in text
+    assert 'VPN_PORT_FORWARDING: "on"' in text
+    # qBittorrent must NOT declare its own ports when sharing gluetun's netns.
+    qb = _qbittorrent_block(text)
+    assert "ports:" not in qb
+    assert "network_mode" in qb
+
+
+def test_render_compose_gluetun_off_is_unchanged(tmp_path):
+    """With gluetun off, qBittorrent keeps its own ports and no network_mode."""
+    qb = _qbittorrent_block(installer.render_compose(tmp_path, SAMPLE_SETTINGS).read_text())
+    assert "ports:" in qb
+    assert "network_mode" not in qb
+    assert "mediahub-gluetun" not in qb
+
+
+def test_render_env_writes_vpn_placeholders(tmp_path):
+    text = installer.render_env(tmp_path, SAMPLE_DRIVE, SAMPLE_SETTINGS).read_text()
+    for key in (
+        "WIREGUARD_PRIVATE_KEY=",
+        "WIREGUARD_ADDRESSES=",
+        "OPENVPN_USER=",
+        "OPENVPN_PASSWORD=",
+    ):
+        assert key in text
+
+
+def test_render_env_backfills_vpn_secrets_from_settings(tmp_path):
+    text = installer.render_env(tmp_path, SAMPLE_DRIVE, _settings_with_gluetun()).read_text()
+    assert "WIREGUARD_PRIVATE_KEY=PRIVKEY" in text
+
+
 # ---------------------------------------------------------------------------
 # render_env
 # ---------------------------------------------------------------------------
@@ -153,6 +279,32 @@ def test_render_env_creates_parent_dir(tmp_path):
     assert out.exists()
 
 
+def test_render_env_writes_api_key_placeholders(tmp_path):
+    """The .env file must include the API-key keys so the web container can
+    pull them from the environment even before the wiring step fills them in."""
+    out = installer.render_env(tmp_path, SAMPLE_DRIVE, SAMPLE_SETTINGS)
+    text = out.read_text()
+    for key in ("SONARR_API_KEY=", "RADARR_API_KEY=", "PROWLARR_API_KEY=", "BAZARR_API_KEY="):
+        assert key in text, f"{key!r} missing from .env"
+
+
+def test_render_env_writes_qbittorrent_credentials(tmp_path):
+    """The web container reads QBITTORRENT_USERNAME/PASSWORD from the .env."""
+    out = installer.render_env(tmp_path, SAMPLE_DRIVE, SAMPLE_SETTINGS)
+    text = out.read_text()
+    assert "QBITTORRENT_USERNAME=admin" in text
+    assert "QBITTORRENT_PASSWORD=" in text
+
+
+def test_render_env_backfills_api_keys_from_settings(tmp_path):
+    """When the wiring step has populated api_keys, render_env writes them in."""
+    settings = {**SAMPLE_SETTINGS, "api_keys": {"sonarr": "abc123", "radarr": "def456"}}
+    out = installer.render_env(tmp_path, SAMPLE_DRIVE, settings)
+    text = out.read_text()
+    assert "SONARR_API_KEY=abc123" in text
+    assert "RADARR_API_KEY=def456" in text
+
+
 # ---------------------------------------------------------------------------
 # prepare_install_dir
 # ---------------------------------------------------------------------------
@@ -180,13 +332,26 @@ def test_prepare_install_dir_idempotent(tmp_path, monkeypatch):
 
 def test_prepare_media_layout_creates_subdirs(tmp_path):
     installer.prepare_media_layout(str(tmp_path))
-    for sub in ("torrents/movies", "torrents/tv", "media/movies", "media/tv"):
+    for sub in (
+        "Torrents/Movies",
+        "Torrents/TV Shows",
+        "Media/Movies",
+        "Media/TV Shows",
+    ):
         assert (tmp_path / sub).is_dir(), f"{sub} not created"
 
 
 def test_prepare_media_layout_idempotent(tmp_path):
     installer.prepare_media_layout(str(tmp_path))
     installer.prepare_media_layout(str(tmp_path))  # should not raise
+
+
+def test_prepare_media_layout_receiver_skips_torrents(tmp_path):
+    """Receiver only needs the Media library — no Torrents subtree."""
+    installer.prepare_media_layout(str(tmp_path), include_torrents=False)
+    assert (tmp_path / "Media/Movies").is_dir()
+    assert (tmp_path / "Media/TV Shows").is_dir()
+    assert not (tmp_path / "Torrents").exists()
 
 
 # ---------------------------------------------------------------------------

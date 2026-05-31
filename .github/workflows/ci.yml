@@ -7,11 +7,13 @@ on:
 
 jobs:
   test:
-    name: "Python ${{ matrix.python-version }}"
-    runs-on: macos-latest
+    name: "Python ${{ matrix.python-version }} on ${{ matrix.os }}"
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        # macOS is the original target; ubuntu covers the seedbox/VPS path.
+        os: [macos-latest, ubuntu-latest]
         python-version: ["3.12", "3.13"]
 
     steps:

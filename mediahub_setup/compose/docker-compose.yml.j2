@@ -5,15 +5,22 @@ x-common-env: &common-env
   PGID: {{ pgid }}
   TZ: {{ tz }}
 
+{# On a public host (seedbox) the web UIs bind to loopback so they are reached
+   over Tailscale or an SSH tunnel, never the public IP. The torrent/sync
+   ports and the Caddy allowlist ports stay on 0.0.0.0 by design. #}
+{% set lb = '127.0.0.1:' if bind_local else '' %}
 services:
+{% if install_arr %}
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
     container_name: mediahub-prowlarr
     environment: *common-env
     volumes:
       - ./config/prowlarr:/config
+{% if 'caddy' not in enabled_services or caddy_mode == 'public' %}
     ports:
-      - "{{ ports.prowlarr }}:9696"
+      - "{{ lb }}{{ ports.prowlarr }}:9696"
+{% endif %}
     restart: unless-stopped
 
   sonarr:
@@ -23,8 +30,10 @@ services:
     volumes:
       - ./config/sonarr:/config
       - ${MEDIA_ROOT}:/data
+{% if 'caddy' not in enabled_services or caddy_mode == 'public' %}
     ports:
-      - "{{ ports.sonarr }}:8989"
+      - "{{ lb }}{{ ports.sonarr }}:8989"
+{% endif %}
     restart: unless-stopped
     depends_on:
       - prowlarr
@@ -36,11 +45,49 @@ services:
     volumes:
       - ./config/radarr:/config
       - ${MEDIA_ROOT}:/data
+{% if 'caddy' not in enabled_services or caddy_mode == 'public' %}
     ports:
-      - "{{ ports.radarr }}:7878"
+      - "{{ lb }}{{ ports.radarr }}:7878"
+{% endif %}
     restart: unless-stopped
     depends_on:
       - prowlarr
+
+{% if 'gluetun' in enabled_services %}
+  gluetun:
+    image: qmcgaw/gluetun:latest
+    container_name: mediahub-gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      VPN_SERVICE_PROVIDER: {{ gluetun.provider }}
+      VPN_TYPE: {{ gluetun.vpn_type | default('wireguard') }}
+{% if gluetun.vpn_type == 'openvpn' %}
+      OPENVPN_USER: ${OPENVPN_USER}
+      OPENVPN_PASSWORD: ${OPENVPN_PASSWORD}
+{% else %}
+      WIREGUARD_PRIVATE_KEY: ${WIREGUARD_PRIVATE_KEY}
+      WIREGUARD_ADDRESSES: ${WIREGUARD_ADDRESSES}
+{% endif %}
+{% if gluetun.server_countries %}
+      SERVER_COUNTRIES: {{ gluetun.server_countries }}
+{% endif %}
+{% if gluetun.port_forwarding %}
+      VPN_PORT_FORWARDING: "on"
+{% endif %}
+      TZ: {{ tz }}
+    # qBittorrent's WebUI + BitTorrent ports are published HERE because
+    # qBittorrent shares this container's network namespace.
+    ports:
+{% if 'caddy' not in enabled_services or caddy_mode == 'public' %}
+      - "{{ lb }}{{ ports.qbittorrent_web }}:{{ ports.qbittorrent_web }}"
+{% endif %}
+      - "{{ ports.qbittorrent_bt }}:6881"
+      - "{{ ports.qbittorrent_bt }}:6881/udp"
+    restart: unless-stopped
+{% endif %}
 
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
@@ -51,11 +98,21 @@ services:
     volumes:
       - ./config/qbittorrent:/config
       - ${MEDIA_ROOT}:/data
+{% if 'gluetun' in enabled_services %}
+    # All traffic egresses through the VPN tunnel; ports live on gluetun.
+    network_mode: "service:gluetun"
+    depends_on:
+      - gluetun
+{% else %}
     ports:
-      - "{{ ports.qbittorrent_web }}:{{ ports.qbittorrent_web }}"
+{% if 'caddy' not in enabled_services or caddy_mode == 'public' %}
+      - "{{ lb }}{{ ports.qbittorrent_web }}:{{ ports.qbittorrent_web }}"
+{% endif %}
       - "{{ ports.qbittorrent_bt }}:6881"
       - "{{ ports.qbittorrent_bt }}:6881/udp"
+{% endif %}
     restart: unless-stopped
+{% endif %}
 
 {% if 'jellyfin' in enabled_services %}
   jellyfin:
@@ -66,10 +123,31 @@ services:
       JELLYFIN_PublishedServerUrl: http://localhost:{{ ports.jellyfin }}
     volumes:
       - ./config/jellyfin:/config
-      - ${MEDIA_ROOT}/media:/data/media
+      - ${MEDIA_ROOT}/Media:/data/Media:ro
+{% if 'caddy' not in enabled_services or caddy_mode == 'public' %}
     ports:
-      - "{{ ports.jellyfin }}:8096"
+      - "{{ lb }}{{ ports.jellyfin }}:8096"
+{% endif %}
     restart: unless-stopped
+{% endif %}
+
+{% if 'overseerr' in enabled_services %}
+  overseerr:
+    image: sctx/overseerr:latest
+    container_name: mediahub-overseerr
+    environment:
+      LOG_LEVEL: info
+      TZ: {{ tz }}
+    volumes:
+      - ./config/overseerr:/app/config
+{% if 'caddy' not in enabled_services or caddy_mode == 'public' %}
+    ports:
+      - "{{ lb }}{{ ports.overseerr }}:5055"
+{% endif %}
+    restart: unless-stopped
+    depends_on:
+      - sonarr
+      - radarr
 {% endif %}
 
 {% if 'jellyseerr' in enabled_services %}
@@ -82,8 +160,10 @@ services:
       PORT: 5055
     volumes:
       - ./config/jellyseerr:/app/config
+{% if 'caddy' not in enabled_services or caddy_mode == 'public' %}
     ports:
-      - "{{ ports.jellyseerr }}:5055"
+      - "{{ lb }}{{ ports.jellyseerr }}:5055"
+{% endif %}
     restart: unless-stopped
 {% if 'jellyfin' in enabled_services %}
     depends_on:
@@ -99,8 +179,56 @@ services:
     volumes:
       - ./config/bazarr:/config
       - ${MEDIA_ROOT}:/data
+{% if 'caddy' not in enabled_services or caddy_mode == 'public' %}
     ports:
-      - "{{ ports.bazarr }}:6767"
+      - "{{ lb }}{{ ports.bazarr }}:6767"
+{% endif %}
+    restart: unless-stopped
+    depends_on:
+      - sonarr
+      - radarr
+{% endif %}
+
+{% if 'web' in enabled_services %}
+  web:
+{% if web_build_context %}
+    build:
+      context: {{ web_build_context }}
+      dockerfile: Dockerfile
+{% else %}
+    image: {{ web_image | default('ghcr.io/dhouchin1/mediahub-web:latest') }}
+{% endif %}
+    container_name: mediahub-web
+    environment:
+      NODE_ENV: production
+      SONARR_URL: http://sonarr:8989
+      SONARR_API_KEY: ${SONARR_API_KEY:-}
+      RADARR_URL: http://radarr:7878
+      RADARR_API_KEY: ${RADARR_API_KEY:-}
+      PROWLARR_URL: http://prowlarr:9696
+      PROWLARR_API_KEY: ${PROWLARR_API_KEY:-}
+      QBITTORRENT_URL: http://qbittorrent:{{ ports.qbittorrent_web }}
+      QBITTORRENT_USERNAME: ${QBITTORRENT_USERNAME:-admin}
+      QBITTORRENT_PASSWORD: ${QBITTORRENT_PASSWORD:-}
+{% if 'bazarr' in enabled_services %}
+      BAZARR_URL: http://bazarr:6767
+      BAZARR_API_KEY: ${BAZARR_API_KEY:-}
+{% endif %}
+{% if 'overseerr' in enabled_services %}
+      OVERSEERR_URL: http://overseerr:5055
+{% endif %}
+{% if 'jellyseerr' in enabled_services %}
+      JELLYSEERR_URL: http://jellyseerr:5055
+{% endif %}
+{% if 'jellyfin' in enabled_services %}
+      JELLYFIN_URL: http://jellyfin:8096
+{% endif %}
+      MEDIA_ROOT: /data
+      HOST_MEDIA_ROOT: ${MEDIA_ROOT}
+{% if 'caddy' not in enabled_services or caddy_mode == 'public' %}
+    ports:
+      - "{{ lb }}{{ ports.web }}:3000"
+{% endif %}
     restart: unless-stopped
     depends_on:
       - sonarr
@@ -115,7 +243,7 @@ services:
       LOG_LEVEL: info
       TZ: {{ tz }}
     ports:
-      - "{{ ports.flaresolverr }}:8191"
+      - "{{ lb }}{{ ports.flaresolverr }}:8191"
     restart: unless-stopped
 {% endif %}
 
@@ -129,7 +257,7 @@ services:
       - ./config/notifiarr:/config
       - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
-      - "{{ ports.notifiarr }}:5454"
+      - "{{ lb }}{{ ports.notifiarr }}:5454"
     restart: unless-stopped
 {% endif %}
 
@@ -149,19 +277,73 @@ services:
       - radarr
 {% endif %}
 
+{% if 'syncthing' in enabled_services %}
+  syncthing:
+    image: syncthing/syncthing:latest
+    container_name: mediahub-syncthing
+    hostname: mediahub-syncthing
+    environment:
+      <<: *common-env
+      STGUIADDRESS: 0.0.0.0:8384
+    volumes:
+      - ./config/syncthing:/var/syncthing/config
+      # ONLY the organised Media library is shared — never Torrents.
+      - ${MEDIA_ROOT}/Media:/data/Media
+    ports:
+{% if 'caddy' not in enabled_services or caddy_mode == 'public' %}
+      - "{{ lb }}{{ ports.syncthing }}:8384"
+{% endif %}
+      # Sync + discovery ports must stay reachable by the peer — never loopback-bound.
+      - "22000:22000/tcp"
+      - "22000:22000/udp"
+      - "21027:21027/udp"
+    restart: unless-stopped
+{% endif %}
+
 {% if 'caddy' in enabled_services %}
   caddy:
     image: caddy:2-alpine
     container_name: mediahub-caddy
     volumes:
       - ./config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./config/caddy/data:/data
-      - ./config/caddy/config:/config
+      - caddy_data:/data
+      - caddy_config:/config
     ports:
+{% if caddy_mode == 'local' %}
+      - "{{ ports.sonarr }}:{{ ports.sonarr }}"
+      - "{{ ports.radarr }}:{{ ports.radarr }}"
+      - "{{ ports.prowlarr }}:{{ ports.prowlarr }}"
+      - "{{ ports.qbittorrent_web }}:{{ ports.qbittorrent_web }}"
+{% if 'jellyfin' in enabled_services %}
+      - "{{ ports.jellyfin }}:{{ ports.jellyfin }}"
+{% endif %}
+{% if 'overseerr' in enabled_services %}
+      - "{{ ports.overseerr }}:{{ ports.overseerr }}"
+{% endif %}
+{% if 'jellyseerr' in enabled_services %}
+      - "{{ ports.jellyseerr }}:{{ ports.jellyseerr }}"
+{% endif %}
+{% if 'bazarr' in enabled_services %}
+      - "{{ ports.bazarr }}:{{ ports.bazarr }}"
+{% endif %}
+{% if 'web' in enabled_services %}
+      - "{{ ports.web }}:{{ ports.web }}"
+{% endif %}
+{% if 'syncthing' in enabled_services %}
+      - "{{ ports.syncthing }}:{{ ports.syncthing }}"
+{% endif %}
+{% else %}
       - "{{ ports.caddy }}:80"
       - "443:443"
       - "443:443/udp"
+{% endif %}
     restart: unless-stopped
+{% endif %}
+
+{% if 'caddy' in enabled_services %}
+volumes:
+  caddy_data:
+  caddy_config:
 {% endif %}
 
 networks:

@@ -27,22 +27,40 @@ Tests run against mocked HTTP clients — no Docker or live services needed. The
 
 ```
 mediahub_setup/
-├── routes/          # One Flask Blueprint per wizard step (welcome → done)
-├── templates/       # Jinja2 HTML (HTMX + Alpine.js + Tailwind CDN)
-├── compose/         # docker-compose.yml.j2 — add new services here
-├── arr_client.py    # REST clients for Sonarr, Radarr, Prowlarr, qBittorrent
-├── wiring_runner.py # Idempotent task list — add new service wiring here
-├── installer.py     # Renders compose template, runs docker compose up
-├── preflight.py     # Docker / port / disk checks
-└── drives.py        # Drive enumeration (macOS diskutil-based)
+├── routes/            # One Flask Blueprint per wizard step (welcome → done)
+├── templates/         # Jinja2 HTML (HTMX + Alpine.js + Tailwind CDN)
+├── compose/           # docker-compose.yml.j2 — add new services here
+├── services.py        # Declarative catalog every other module reads
+├── roles.py           # Deployment roles (all_in_one / seedbox / receiver)
+├── platform_detect.py # is_macos()/is_linux() — branch here, not on platform.system()
+├── arr_client.py      # REST clients for Sonarr, Radarr, Prowlarr, qBittorrent
+├── syncthing_client.py# Syncthing REST client (seedbox ↔ receiver sync)
+├── wiring_runner.py   # Idempotent task list — add new service wiring here
+├── installer.py       # Renders compose template, runs docker compose up
+├── preflight.py       # Docker / port / disk / Tailscale checks
+└── drives.py          # Drive enumeration (macOS diskutil + Linux lsblk backends)
 ```
 
 ## Adding a new service
 
-1. Add the service to `compose/docker-compose.yml.j2`.
-2. If it has a REST API, add a client class to `arr_client.py`.
-3. Add wiring tasks to `wiring_runner.py` following the existing pattern.
-4. Add tests in `tests/` — mock the HTTP client with `responses` or `unittest.mock`.
+1. Add a `ServiceDef` entry to `services.py` and register it in `OPTIONAL`
+   (the settings checkbox, Done card, and dashboard pick it up automatically).
+2. Add a `{% if 'x' in enabled_services %}` block to `compose/docker-compose.yml.j2`.
+3. If it has a REST API, add a client class (mirror `bazarr_client.py` /
+   `syncthing_client.py`).
+4. Add wiring tasks to `wiring_runner.py` following the existing pattern.
+5. Add tests in `tests/` — mock the HTTP client with `unittest.mock`.
+
+## Conventions to follow
+
+- **Platform branches** go through `platform_detect.is_macos()` / `is_linux()`
+  so tests can monkeypatch one place — never call `platform.system()` directly.
+- **Role-specific behaviour** goes through `roles.py` helpers
+  (`installs_arr`, `is_server`, …). Keep `all_in_one` byte-compatible with the
+  pre-role output, and keep the core wiring plan at 15 tasks (gate anything new
+  behind a role/service). Tests assert these counts.
+- **Never bind to `0.0.0.0` on a seedbox** — published web-UI ports use the
+  `lb` (loopback) prefix in the compose template; torrent/sync ports don't.
 
 ## Pull request checklist
 

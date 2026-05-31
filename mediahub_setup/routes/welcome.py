@@ -1,6 +1,6 @@
-from flask import Blueprint, render_template
+from flask import Blueprint, redirect, render_template, request, url_for
 
-from .. import state
+from .. import roles, state
 
 bp = Blueprint("welcome", __name__)
 
@@ -17,4 +17,13 @@ def index():
         has_partial=has_partial,
         has_install=has_install,
         has_wiring=has_wiring,
+        current_role=roles.current(),
+        roles=roles,
     )
+
+
+@bp.post("/role")
+def choose_role():
+    """Record the chosen deployment role and advance to preflight."""
+    state.set("role", roles.normalize(request.form.get("role")))
+    return redirect(url_for("preflight.index"), code=303)

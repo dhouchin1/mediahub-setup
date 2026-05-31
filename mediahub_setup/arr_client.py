@@ -6,6 +6,7 @@ state first and skips the write if nothing needs to change.
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import time
@@ -135,6 +136,44 @@ class QBittorrentClient:
         resp = self._session.post(
             f"{self.base_url}/api/v2/torrents/createCategory",
             data={"category": name, "savePath": save_path},
+            timeout=15,
+        )
+        resp.raise_for_status()
+
+    def set_listen_port(self, port: int) -> None:
+        """Set the incoming BitTorrent listen port (disables random port).
+
+        Used when qBittorrent egresses through a VPN with port-forwarding:
+        the forwarded port must match qBittorrent's listen port for seeding.
+        """
+        resp = self._session.post(
+            f"{self.base_url}/api/v2/app/setPreferences",
+            data={"json": json.dumps({"listen_port": int(port), "random_port": False})},
+            timeout=15,
+        )
+        resp.raise_for_status()
+
+    def set_global_share_limits(
+        self, *, ratio: float, seeding_time_minutes: int, remove_on_limit: bool
+    ) -> None:
+        """Set global ratio + seed-time limits and the action when reached.
+
+        ``max_ratio_act`` is qBittorrent's share-limit action enum:
+        ``0`` = stop (pause), ``2`` = remove torrent **and** delete its files.
+        On a seedbox we remove+delete so disk is freed once seeding is done —
+        the organised copy in ``/data/Media`` survives because Sonarr/Radarr
+        hardlinked it (separate directory entry, same inode).
+        """
+        prefs = {
+            "max_ratio_enabled": ratio > 0,
+            "max_ratio": float(ratio),
+            "max_seeding_time_enabled": seeding_time_minutes > 0,
+            "max_seeding_time": int(seeding_time_minutes),
+            "max_ratio_act": 2 if remove_on_limit else 0,
+        }
+        resp = self._session.post(
+            f"{self.base_url}/api/v2/app/setPreferences",
+            data={"json": json.dumps(prefs)},
             timeout=15,
         )
         resp.raise_for_status()
@@ -314,9 +353,9 @@ class SonarrClient(ArrClient):
     def enable_hardlinks(self) -> dict:
         """Enable hardlinks in media management settings."""
         current = self.get("/api/v3/config/mediamanagement")
-        if current.get("hardlinkCopyFiles"):
+        if current.get("copyUsingHardlinks"):
             return current  # already enabled
-        current["hardlinkCopyFiles"] = True
+        current["copyUsingHardlinks"] = True
         return self.put("/api/v3/config/mediamanagement", current)
 
 
@@ -388,7 +427,7 @@ class RadarrClient(ArrClient):
     def enable_hardlinks(self) -> dict:
         """Enable hardlinks in media management settings."""
         current = self.get("/api/v3/config/mediamanagement")
-        if current.get("hardlinkCopyFiles"):
+        if current.get("copyUsingHardlinks"):
             return current  # already enabled
-        current["hardlinkCopyFiles"] = True
+        current["copyUsingHardlinks"] = True
         return self.put("/api/v3/config/mediamanagement", current)

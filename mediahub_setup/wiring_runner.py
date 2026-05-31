@@ -23,7 +23,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import state
+from . import roles, state
 from .arr_client import (
     ProwlarrClient,
     QBittorrentClient,
@@ -34,8 +34,9 @@ from .arr_client import (
 )
 from .bazarr_client import BazarrClient
 from .jellyfin_client import JellyfinClient
-from .jellyseerr_client import JellyseerrClient
 from .notifiarr import configure_notifiarr_telegram, wire_notifiarr_to_arr
+from .overseerr_client import RequestAppClient
+from .syncthing_client import SyncthingClient, read_syncthing_apikey
 
 # ---------------------------------------------------------------------------
 # Module-level state (lives for the lifetime of the Flask process)
@@ -71,11 +72,17 @@ class WiringContext:
     shared_password: str
     ports: dict[str, int]
     enabled: list[str]
+    role: str = roles.ALL_IN_ONE
+    # qBittorrent's reachable hostname on the docker network. When it egresses
+    # through Gluetun it shares that container's netns, so *arr + Caddy must
+    # address it as "gluetun" rather than "qbittorrent".
+    qb_host: str = "qbittorrent"
     # Container DNS names (used for cross-container wiring)
     sonarr_internal: str = ""
     radarr_internal: str = ""
     prowlarr_internal: str = ""
     jellyfin_internal: str = ""
+    overseerr_internal: str = ""
     jellyseerr_internal: str = ""
     bazarr_internal: str = ""
     # Per-host URLs (used for local-machine API calls from the wizard)
@@ -84,14 +91,21 @@ class WiringContext:
     radarr_url: str = ""
     prowlarr_url: str = ""
     jellyfin_url: str = ""
+    overseerr_url: str = ""
     jellyseerr_url: str = ""
     bazarr_url: str = ""
+    syncthing_url: str = ""
     # Captured during wiring
     api_keys: dict[str, str] = field(default_factory=dict)
     qb_client: QBittorrentClient | None = None
     sonarr_client: SonarrClient | None = None
     radarr_client: RadarrClient | None = None
     prowlarr_client: ProwlarrClient | None = None
+    syncthing_client: SyncthingClient | None = None
+    # Syncthing pairing info surfaced on the Done page
+    syncthing_device_id: str = ""
+    syncthing_folder_id: str = ""
+    syncthing_folder_type: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -101,42 +115,45 @@ class WiringContext:
 
 def _connect_qbittorrent(ctx: WiringContext) -> str | None:
     qb = QBittorrentClient(ctx.qb_url)
+    qb_user = ctx.settings.get("qbittorrent_username", "admin")
     try:
         temp_pw = get_qbittorrent_temp_password("mediahub-qbittorrent")
-        qb.login(temp_pw)
+        qb.login(temp_pw, username="admin")  # temp creds always use admin
         ctx.qb_client = qb
         return "Logged in with temporary password"
     except Exception:
-        # Maybe already changed — try with shared_password
-        qb.login(ctx.shared_password)
+        # Maybe already changed — try with shared_password under the chosen user
+        qb.login(ctx.shared_password, username=qb_user)
         ctx.qb_client = qb
         return "Logged in with shared password"
 
 
 def _change_qbittorrent_password(ctx: WiringContext) -> str | None:
     assert ctx.qb_client is not None
+    qb_user = ctx.settings.get("qbittorrent_username", "admin")
     # If we logged in with shared_password it's already correct
     try:
         ctx.qb_client.list_categories()  # Quick probe with current creds
     except Exception:
         pass
-    # Always set it explicitly to the shared password (idempotent)
-    ctx.qb_client.change_password(ctx.shared_password)
+    # Always set it explicitly (idempotent). This also renames the user if
+    # the wizard's chosen username differs from "admin".
+    ctx.qb_client.change_password(ctx.shared_password, username=qb_user)
     qb2 = QBittorrentClient(ctx.qb_url)
-    qb2.login(ctx.shared_password)
+    qb2.login(ctx.shared_password, username=qb_user)
     ctx.qb_client = qb2
     return None
 
 
 def _create_qb_category_movies(ctx: WiringContext) -> str | None:
     assert ctx.qb_client is not None
-    ctx.qb_client.create_category("movies", "/data/torrents/movies")
+    ctx.qb_client.create_category("Movies", "/data/Torrents/Movies")
     return None
 
 
 def _create_qb_category_tv(ctx: WiringContext) -> str | None:
     assert ctx.qb_client is not None
-    ctx.qb_client.create_category("tv", "/data/torrents/tv")
+    ctx.qb_client.create_category("TV Shows", "/data/Torrents/TV Shows")
     return None
 
 
@@ -183,20 +200,21 @@ def _register_radarr_in_prowlarr(ctx: WiringContext) -> str | None:
 
 def _add_qb_to_sonarr(ctx: WiringContext) -> str | None:
     assert ctx.sonarr_client is not None
-    qb_port = ctx.ports.get("qbittorrent_web", 8080)
+    qb_port = ctx.ports.get("qbittorrent_web", 8090)
+    qb_user = ctx.settings.get("qbittorrent_username", "admin")
     ctx.sonarr_client.add_qbittorrent(
-        host="qbittorrent",
+        host=ctx.qb_host,
         port=qb_port,
-        username="admin",
+        username=qb_user,
         password=ctx.shared_password,
-        category="tv",
+        category="TV Shows",
     )
     return None
 
 
 def _add_sonarr_root_folder(ctx: WiringContext) -> str | None:
     assert ctx.sonarr_client is not None
-    ctx.sonarr_client.add_root_folder("/data/media/tv")
+    ctx.sonarr_client.add_root_folder("/data/Media/TV Shows")
     return None
 
 
@@ -208,20 +226,21 @@ def _enable_sonarr_hardlinks(ctx: WiringContext) -> str | None:
 
 def _add_qb_to_radarr(ctx: WiringContext) -> str | None:
     assert ctx.radarr_client is not None
-    qb_port = ctx.ports.get("qbittorrent_web", 8080)
+    qb_port = ctx.ports.get("qbittorrent_web", 8090)
+    qb_user = ctx.settings.get("qbittorrent_username", "admin")
     ctx.radarr_client.add_qbittorrent(
-        host="qbittorrent",
+        host=ctx.qb_host,
         port=qb_port,
-        username="admin",
+        username=qb_user,
         password=ctx.shared_password,
-        category="movies",
+        category="Movies",
     )
     return None
 
 
 def _add_radarr_root_folder(ctx: WiringContext) -> str | None:
     assert ctx.radarr_client is not None
-    ctx.radarr_client.add_root_folder("/data/media/movies")
+    ctx.radarr_client.add_root_folder("/data/Media/Movies")
     return None
 
 
@@ -248,19 +267,30 @@ def _add_jellyfin_libraries(ctx: WiringContext) -> str | None:
     return "Open Jellyfin web UI to finish first-time setup"
 
 
-# ----- Jellyseerr -----------------------------------------------------------
+# ----- Overseerr / Jellyseerr ----------------------------------------------
+
+
+def _wait_for_overseerr(ctx: WiringContext) -> str | None:
+    client = RequestAppClient(ctx.overseerr_url)
+    client.wait_until_ready(timeout=180)
+    return "Server is responding"
+
+
+def _record_overseerr_for_done(ctx: WiringContext) -> str | None:
+    """Overseerr's API key is generated during first-run setup in the UI,
+    so we surface URLs + setup hints on the Done page rather than configure
+    via REST (which would require an already-set-up instance)."""
+    return "Configure via web UI; URL surfaced on Done page"
 
 
 def _wait_for_jellyseerr(ctx: WiringContext) -> str | None:
-    client = JellyseerrClient(ctx.jellyseerr_url)
+    client = RequestAppClient(ctx.jellyseerr_url)
     client.wait_until_ready(timeout=180)
     return "Server is responding"
 
 
 def _record_jellyseerr_for_done(ctx: WiringContext) -> str | None:
-    """Jellyseerr's API key is generated during first-run setup in the UI,
-    so we surface URLs + setup hints on the Done page rather than configure
-    via REST (which would require an already-set-up instance)."""
+    """Same pattern as Overseerr — first-run setup is done in the web UI."""
     return "Configure via web UI; URL surfaced on Done page"
 
 
@@ -310,6 +340,7 @@ def _configure_notifiarr(ctx: WiringContext) -> str | None:
         shared_password=ctx.shared_password,
         telegram_bot_token=notifiarr_cfg.get("telegram_bot_token", ""),
         telegram_chat_id=notifiarr_cfg.get("telegram_chat_id", ""),
+        qbittorrent_username=ctx.settings.get("qbittorrent_username", "admin"),
     )
     return "Config written"
 
@@ -333,11 +364,13 @@ def _wire_notifiarr_webhooks(ctx: WiringContext) -> str | None:
 def _configure_recyclarr(ctx: WiringContext) -> str | None:
     from .recyclarr import render_recyclarr_config
 
+    selected = ctx.settings.get("recyclarr_profiles")
     render_recyclarr_config(
         sonarr_internal_url=ctx.sonarr_internal,
         sonarr_api_key=ctx.api_keys["sonarr"],
         radarr_internal_url=ctx.radarr_internal,
         radarr_api_key=ctx.api_keys["radarr"],
+        selected_profiles=selected,
     )
     return "Config written — runs daily at 4am"
 
@@ -348,9 +381,138 @@ def _configure_recyclarr(ctx: WiringContext) -> str | None:
 def _configure_caddy(ctx: WiringContext) -> str | None:
     from .caddy import render_caddyfile
 
-    domain = (ctx.settings.get("caddy") or {}).get("domain", "mediahub.local")
-    render_caddyfile(domain=domain, enabled=ctx.enabled, ports=ctx.ports)
-    return f"Caddyfile written for {domain}"
+    caddy_cfg = ctx.settings.get("caddy") or {}
+    mode = ctx.settings.get("caddy_mode") or caddy_cfg.get("mode", "local")
+    domain = caddy_cfg.get("domain", "mediahub.local")
+    render_caddyfile(
+        domain=domain,
+        enabled=ctx.enabled,
+        ports=ctx.ports,
+        mode=mode,
+        qbittorrent_host=ctx.qb_host,
+    )
+    if mode == "public":
+        return f"Caddyfile written for {domain} (public/HTTPS mode)"
+    return "Caddyfile written (local-only mode, IP allowlist active)"
+
+
+# ----- Retention (seedbox disk management) ---------------------------------
+
+
+def _set_qb_share_limits(ctx: WiringContext) -> str | None:
+    """Apply global ratio + seed-time limits so a small seedbox disk doesn't
+    fill up. When a limit is hit qBittorrent removes the torrent and deletes
+    its ``/data/Torrents`` copy — the hardlinked ``/data/Media`` library that
+    Syncthing replicates survives.
+    """
+    assert ctx.qb_client is not None
+    r = ctx.settings.get("retention") or {}
+    ratio = float(r.get("seed_ratio", 2.0))
+    minutes = int(r.get("seed_time_minutes", 10080))
+    remove = bool(r.get("remove_on_limit", True))
+    ctx.qb_client.set_global_share_limits(
+        ratio=ratio, seeding_time_minutes=minutes, remove_on_limit=remove
+    )
+    action = "remove+delete" if remove else "pause"
+    return f"ratio {ratio}, {minutes}m, then {action}"
+
+
+# ----- Gluetun (qBittorrent VPN egress) ------------------------------------
+
+
+def _set_qb_vpn_listen_port(ctx: WiringContext) -> str | None:
+    """Best-effort: read Gluetun's forwarded port and set it as qBittorrent's
+    listen port so seeding works through the tunnel.
+
+    Never hard-fails — port forwarding is assigned asynchronously by the VPN
+    and may not be ready yet; the user can set it manually if so.
+    """
+    import json as _json
+    import subprocess as _subprocess
+
+    try:
+        result = _subprocess.run(
+            [
+                "docker",
+                "exec",
+                "mediahub-gluetun",
+                "wget",
+                "-qO-",
+                "http://localhost:8000/v1/openvpn/portforwarded",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            port = int(_json.loads(result.stdout).get("port") or 0)
+            if port and ctx.qb_client is not None:
+                ctx.qb_client.set_listen_port(port)
+                return f"qBittorrent listen port set to forwarded port {port}"
+    except Exception:
+        pass
+    return (
+        "Gluetun handles port forwarding; set qBittorrent's listen port manually if seeding stalls"
+    )
+
+
+# ----- Syncthing -----------------------------------------------------------
+
+
+def _wait_for_syncthing(ctx: WiringContext) -> str | None:
+    """Read the auto-generated API key from the container and wait for the
+    REST API to come up."""
+    key = read_syncthing_apikey("mediahub-syncthing", timeout=120)
+    ctx.api_keys["syncthing"] = key
+    client = SyncthingClient(ctx.syncthing_url, api_key=key)
+    client.wait_until_ready(timeout=180)
+    ctx.syncthing_client = client
+    return "Server is responding"
+
+
+def _configure_syncthing_folder(ctx: WiringContext) -> str | None:
+    """Create the Media folder with the role-appropriate type and (on a
+    receiver) forced versioning, then pair with the remote device if its ID
+    was provided in Settings.
+
+    Send-Only on a seedbox (authoritative source); Receive-Only on a home
+    receiver, where syncthing_client forces staggered versioning so a delete
+    on the seedbox parks the file in ``.stversions`` instead of wiping the
+    home library.
+    """
+    assert ctx.syncthing_client is not None
+    client = ctx.syncthing_client
+
+    device_id = client.my_device_id()
+    ctx.syncthing_device_id = device_id
+
+    st_cfg = ctx.settings.get("syncthing") or {}
+    folder_id = (st_cfg.get("folder_id") or "mediahub-media").strip()
+    label = (st_cfg.get("folder_label") or "MediaHub Library").strip()
+    remote = (st_cfg.get("remote_device_id") or "").strip()
+    folder_type = roles.syncthing_folder_type(ctx.role) or "sendonly"
+    ctx.syncthing_folder_id = folder_id
+    ctx.syncthing_folder_type = folder_type
+
+    device_ids = [device_id]
+    if remote:
+        client.add_device(remote)
+        device_ids.append(remote)
+
+    client.set_folder(
+        folder_id=folder_id,
+        label=label,
+        path="/data/Media",
+        folder_type=folder_type,
+        device_ids=device_ids,
+    )
+
+    msg = f"Folder '{folder_id}' set to {folder_type}"
+    if folder_type == "receiveonly":
+        msg += " + versioning"
+    if remote:
+        msg += f"; paired with {remote[:7]}…"
+    return msg
 
 
 # ---------------------------------------------------------------------------
@@ -358,38 +520,51 @@ def _configure_caddy(ctx: WiringContext) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def _build_task_plan(enabled: list[str]) -> list[WiringTask]:
+def _build_task_plan(enabled: list[str], role: str | None = None) -> list[WiringTask]:
     """Return the ordered list of tasks for the given enabled services.
 
-    Core stack tasks always run. Optional service tasks are appended only
-    when their services are enabled (and required prerequisites are met).
+    The core *arr stack tasks run for roles that install it (all-in-one and
+    seedbox). The receiver role skips them entirely — it only runs the
+    optional-service tasks (e.g. Syncthing). Optional service tasks are
+    appended only when their services are enabled.
     """
-    plan: list[WiringTask] = [
-        # qBittorrent
-        WiringTask("Connect to qBittorrent", _connect_qbittorrent),
-        WiringTask("Change qBittorrent password", _change_qbittorrent_password),
-        WiringTask("Create qBittorrent category: movies", _create_qb_category_movies),
-        WiringTask("Create qBittorrent category: tv", _create_qb_category_tv),
-        # API keys
-        WiringTask("Read Sonarr API key", _read_sonarr_api_key),
-        WiringTask("Read Radarr API key", _read_radarr_api_key),
-        WiringTask("Read Prowlarr API key", _read_prowlarr_api_key),
-        # Prowlarr
-        WiringTask("Register Sonarr in Prowlarr", _register_sonarr_in_prowlarr),
-        WiringTask("Register Radarr in Prowlarr", _register_radarr_in_prowlarr),
-        # Sonarr
-        WiringTask("Add qBittorrent to Sonarr", _add_qb_to_sonarr),
-        WiringTask("Add root folder to Sonarr (/data/media/tv)", _add_sonarr_root_folder),
-        WiringTask("Enable hardlinks in Sonarr", _enable_sonarr_hardlinks),
-        # Radarr
-        WiringTask("Add qBittorrent to Radarr", _add_qb_to_radarr),
-        WiringTask("Add root folder to Radarr (/data/media/movies)", _add_radarr_root_folder),
-        WiringTask("Enable hardlinks in Radarr", _enable_radarr_hardlinks),
-    ]
+    if role is None:
+        role = roles.current()
+
+    plan: list[WiringTask] = []
+    if roles.installs_arr(role):
+        plan += [
+            # qBittorrent
+            WiringTask("Connect to qBittorrent", _connect_qbittorrent),
+            WiringTask("Change qBittorrent password", _change_qbittorrent_password),
+            WiringTask("Create qBittorrent category: Movies", _create_qb_category_movies),
+            WiringTask("Create qBittorrent category: TV Shows", _create_qb_category_tv),
+            # API keys
+            WiringTask("Read Sonarr API key", _read_sonarr_api_key),
+            WiringTask("Read Radarr API key", _read_radarr_api_key),
+            WiringTask("Read Prowlarr API key", _read_prowlarr_api_key),
+            # Prowlarr
+            WiringTask("Register Sonarr in Prowlarr", _register_sonarr_in_prowlarr),
+            WiringTask("Register Radarr in Prowlarr", _register_radarr_in_prowlarr),
+            # Sonarr
+            WiringTask("Add qBittorrent to Sonarr", _add_qb_to_sonarr),
+            WiringTask("Add root folder to Sonarr (/data/Media/TV Shows)", _add_sonarr_root_folder),
+            WiringTask("Enable hardlinks in Sonarr", _enable_sonarr_hardlinks),
+            # Radarr
+            WiringTask("Add qBittorrent to Radarr", _add_qb_to_radarr),
+            WiringTask("Add root folder to Radarr (/data/Media/Movies)", _add_radarr_root_folder),
+            WiringTask("Enable hardlinks in Radarr", _enable_radarr_hardlinks),
+        ]
 
     if "jellyfin" in enabled:
         plan.append(WiringTask("Wait for Jellyfin to boot", _wait_for_jellyfin, ["jellyfin"]))
         plan.append(WiringTask("Verify Jellyfin libraries", _add_jellyfin_libraries, ["jellyfin"]))
+
+    if "overseerr" in enabled:
+        plan.append(WiringTask("Wait for Overseerr to boot", _wait_for_overseerr, ["overseerr"]))
+        plan.append(
+            WiringTask("Surface Overseerr setup link", _record_overseerr_for_done, ["overseerr"])
+        )
 
     if "jellyseerr" in enabled:
         plan.append(WiringTask("Wait for Jellyseerr to boot", _wait_for_jellyseerr, ["jellyseerr"]))
@@ -418,23 +593,42 @@ def _build_task_plan(enabled: list[str]) -> list[WiringTask]:
     if "caddy" in enabled:
         plan.append(WiringTask("Generate Caddy reverse proxy config", _configure_caddy, ["caddy"]))
 
+    if "syncthing" in enabled:
+        plan.append(WiringTask("Wait for Syncthing to boot", _wait_for_syncthing, ["syncthing"]))
+        plan.append(
+            WiringTask(
+                "Configure Syncthing library folder", _configure_syncthing_folder, ["syncthing"]
+            )
+        )
+
+    if "gluetun" in enabled and roles.installs_arr(role):
+        plan.append(
+            WiringTask("Set qBittorrent VPN listen port", _set_qb_vpn_listen_port, ["gluetun"])
+        )
+
+    # Seedbox: cap seeding so a small VPS disk auto-prunes (the home copy is
+    # kept safe by Syncthing). Not added for all-in-one, keeping its plan at 15.
+    if roles.is_server(role) and roles.installs_arr(role):
+        plan.append(WiringTask("Set qBittorrent share limits", _set_qb_share_limits))
+
     return plan
 
 
-def planned_task_names(enabled: list[str] | None = None) -> list[str]:
+def planned_task_names(enabled: list[str] | None = None, role: str | None = None) -> list[str]:
     """Return the names of tasks that will run for the given enabled list.
 
-    If *enabled* is None, reads from saved settings state.
+    If *enabled* is None, reads from saved settings state. If *role* is None,
+    the current role is used.
     """
     if enabled is None:
         settings = state.get("settings") or {}
         enabled = settings.get("enabled_services") or []
-    return [t.name for t in _build_task_plan(enabled)]
+    return [t.name for t in _build_task_plan(enabled, role)]
 
 
 # Backwards-compat constant — kept for tests that import it. Reflects only
-# the always-on core task names.
-TASK_NAMES: list[str] = [t.name for t in _build_task_plan([])]
+# the always-on core task names (all-in-one role).
+TASK_NAMES: list[str] = [t.name for t in _build_task_plan([], role=roles.ALL_IN_ONE)]
 
 
 def _initial_tasks(task_names: list[str]) -> list[dict]:
@@ -498,23 +692,28 @@ def _build_context() -> WiringContext:
     shared_password = settings.get("shared_password", "")
 
     ports = settings.get("ports") or {}
-    qb_port = ports.get("qbittorrent_web", 8080)
+    qb_port = ports.get("qbittorrent_web", 8090)
     sonarr_port = ports.get("sonarr", 8989)
     radarr_port = ports.get("radarr", 7878)
     prowlarr_port = ports.get("prowlarr", 9696)
     jellyfin_port = ports.get("jellyfin", 8096)
-    jellyseerr_port = ports.get("jellyseerr", 5055)
+    overseerr_port = ports.get("overseerr", 5055)
+    jellyseerr_port = ports.get("jellyseerr", 5056)
     bazarr_port = ports.get("bazarr", 6767)
+    syncthing_port = ports.get("syncthing", 8384)
 
     return WiringContext(
         settings=settings,
         shared_password=shared_password,
         ports=ports,
         enabled=enabled,
+        role=roles.current(),
+        qb_host="gluetun" if "gluetun" in enabled else "qbittorrent",
         sonarr_internal=f"http://sonarr:{sonarr_port}",
         radarr_internal=f"http://radarr:{radarr_port}",
         prowlarr_internal=f"http://prowlarr:{prowlarr_port}",
         jellyfin_internal=f"http://jellyfin:{jellyfin_port}",
+        overseerr_internal=f"http://overseerr:{overseerr_port}",
         jellyseerr_internal=f"http://jellyseerr:{jellyseerr_port}",
         bazarr_internal=f"http://bazarr:{bazarr_port}",
         qb_url=f"http://localhost:{qb_port}",
@@ -522,8 +721,10 @@ def _build_context() -> WiringContext:
         radarr_url=f"http://localhost:{radarr_port}",
         prowlarr_url=f"http://localhost:{prowlarr_port}",
         jellyfin_url=f"http://localhost:{jellyfin_port}",
+        overseerr_url=f"http://localhost:{overseerr_port}",
         jellyseerr_url=f"http://localhost:{jellyseerr_port}",
         bazarr_url=f"http://localhost:{bazarr_port}",
+        syncthing_url=f"http://localhost:{syncthing_port}",
     )
 
 
@@ -558,7 +759,15 @@ def _run_wiring(plan: list[WiringTask]) -> None:
                     for k, v in ctx.api_keys.items()
                     if k in ("sonarr", "radarr", "prowlarr", "bazarr")
                 },
-                "qb_credentials": {"username": "admin", "password": ctx.shared_password},
+                "qb_credentials": {
+                    "username": ctx.settings.get("qbittorrent_username", "admin"),
+                    "password": ctx.shared_password,
+                },
+                "syncthing": {
+                    "device_id": ctx.syncthing_device_id,
+                    "folder_id": ctx.syncthing_folder_id,
+                    "folder_type": ctx.syncthing_folder_type,
+                },
                 "tasks": tasks_snapshot,
             },
         )

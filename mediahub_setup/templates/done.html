@@ -16,7 +16,11 @@
       <span class="bg-gradient-to-r from-violet-400 to-pink-400 bg-clip-text text-transparent">You're all set!</span>
     </h1>
     <p class="text-slate-300 text-lg max-w-xl mx-auto">
+      {% if role == 'receiver' %}
+      Your Syncthing receiver is running. Pair it with your seedbox below and the library syncs down automatically.
+      {% else %}
       Your media stack is running and fully wired. Here's everything you need to get started.
+      {% endif %}
     </p>
   </div>
 
@@ -123,6 +127,24 @@
   <div>
     <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-4">Jump right in</h2>
     <div class="flex flex-wrap gap-3">
+      {% if web_enabled %}
+      <a href="{{ web_url }}" target="_blank" rel="noopener"
+         class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 text-white font-medium shadow-lg shadow-teal-500/30 hover:shadow-teal-500/50 hover:scale-[1.02] transition transform text-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        Open MediaHub dashboard
+      </a>
+      {% endif %}
+      {% if overseerr_enabled %}
+      <a href="{{ overseerr_url }}" target="_blank" rel="noopener"
+         class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-medium shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 hover:scale-[1.02] transition transform text-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+        </svg>
+        Open Overseerr (request anything)
+      </a>
+      {% endif %}
       {% if jellyseerr_enabled %}
       <a href="{{ jellyseerr_url }}" target="_blank" rel="noopener"
          class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-medium shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:scale-[1.02] transition transform text-sm">
@@ -142,6 +164,7 @@
         Open Jellyfin
       </a>
       {% endif %}
+      {% if install_arr %}
       <a href="{{ radarr_url }}/add/search" target="_blank" rel="noopener"
          class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-violet-500 to-pink-500 text-white font-medium shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 hover:scale-[1.02] transition transform text-sm">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -156,6 +179,7 @@
         </svg>
         Add your first show
       </a>
+      {% endif %}
       <a href="{{ url_for('dashboard.index') }}"
          class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-600/50 text-slate-100 font-medium transition text-sm">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -166,8 +190,30 @@
     </div>
   </div>
 
-  {% if jellyseerr_enabled %}
-  <!-- Family Hub / Telegram integration hint -->
+  {% if overseerr_enabled %}
+  <!-- Family Hub / Telegram integration hint (Overseerr) -->
+  <div class="rounded-xl p-5 bg-orange-500/5 border border-orange-500/20">
+    <h2 class="text-xs font-semibold uppercase tracking-wider text-orange-300/80 mb-2">Family Hub & Telegram</h2>
+    <p class="text-sm text-slate-300 mb-2">
+      Overseerr is ready to be embedded in your <strong>Family Hub</strong> media tab. Use these endpoints:
+    </p>
+    <ul class="space-y-1 text-xs font-mono text-slate-400">
+      <li>Web UI: <a href="{{ overseerr_url }}" target="_blank" class="text-orange-300 hover:text-orange-200 underline">{{ overseerr_url }}</a></li>
+      <li>API base: <code class="bg-slate-800 px-1 py-0.5 rounded text-slate-200">{{ overseerr_url }}api/v1</code></li>
+      <li>Auth: generate an API key from Overseerr Settings → General after first-run setup</li>
+    </ul>
+    {% if notifiarr_enabled %}
+    <p class="text-sm text-slate-300 mt-3">
+      Telegram notifications are wired through Notifiarr — your bot will message you when downloads complete.
+    </p>
+    {% else %}
+    <p class="text-sm text-slate-300 mt-3">
+      Want Telegram bot requests? Enable Notifiarr next time you run the wizard.
+    </p>
+    {% endif %}
+  </div>
+  {% elif jellyseerr_enabled %}
+  <!-- Family Hub / Telegram integration hint (Jellyseerr) -->
   <div class="rounded-xl p-5 bg-indigo-500/5 border border-indigo-500/20">
     <h2 class="text-xs font-semibold uppercase tracking-wider text-indigo-300/80 mb-2">Family Hub & Telegram</h2>
     <p class="text-sm text-slate-300 mb-2">
@@ -190,10 +236,59 @@
   </div>
   {% endif %}
 
+  {% if syncthing_enabled %}
+  <!-- Syncthing — library replication + pairing -->
+  <div class="rounded-xl p-5 bg-teal-500/5 border border-teal-500/20">
+    <h2 class="text-xs font-semibold uppercase tracking-wider text-teal-300/80 mb-2">Syncthing — library replication</h2>
+    {% if syncthing.device_id %}
+    <p class="text-sm text-slate-300 mb-2">
+      This machine's Syncthing <strong>device ID</strong> — add it on the other machine to pair the two:
+    </p>
+    <div class="flex items-center gap-2 mb-3" x-data="{ copied: false }">
+      <code class="text-[11px] sm:text-xs font-mono bg-slate-800 px-2 py-1 rounded text-teal-200 break-all flex-1">{{ syncthing.device_id }}</code>
+      <button @click="navigator.clipboard.writeText('{{ syncthing.device_id }}').then(()=>{copied=true;setTimeout(()=>copied=false,1500)})"
+              class="text-xs text-slate-400 hover:text-slate-200 transition flex-shrink-0" x-text="copied ? 'Copied!' : 'Copy'"></button>
+    </div>
+    {% else %}
+    <p class="text-sm text-slate-300 mb-2">
+      Open the Syncthing UI to find this machine's device ID (Actions → Show ID) and pair it with the other machine.
+    </p>
+    {% endif %}
+    <ul class="space-y-1 text-xs text-slate-400 mb-3">
+      <li>Folder ID: <code class="bg-slate-800 px-1 py-0.5 rounded text-slate-200">{{ syncthing.folder_id or 'mediahub-media' }}</code> — must match on both peers</li>
+      {% if syncthing.folder_type %}<li>This folder is <code class="bg-slate-800 px-1 py-0.5 rounded text-slate-200">{{ syncthing.folder_type }}</code></li>{% endif %}
+      <li>Syncthing UI: <a href="{{ syncthing_url }}" target="_blank" rel="noopener" class="text-teal-300 hover:text-teal-200 underline">{{ syncthing_url }}</a></li>
+    </ul>
+    {% if role == 'seedbox' %}
+    <p class="text-sm text-slate-300">
+      On your <strong>home Mac</strong>, run <code class="bg-slate-800 px-1 rounded text-slate-200">mediahub-setup --role=receiver</code>, paste this device ID, and the library syncs down (Receive-Only, versioned).
+    </p>
+    {% elif role == 'receiver' %}
+    <div class="text-sm text-amber-200 bg-amber-500/10 border border-amber-500/20 rounded px-3 py-2">
+      <strong>⚠ Keep versioning ON.</strong> This receiver is Receive-Only with staggered versioning, so when the seedbox prunes a seeded file your copy is parked in <code>.stversions</code> rather than deleted. Do <strong>not</strong> switch this folder to Send&nbsp;&amp;&nbsp;Receive or disable versioning — deletions would propagate and you could lose your library.
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <!-- What's next -->
   <div class="rounded-xl p-5 bg-slate-900/40 border border-slate-700/50">
     <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">What's next</h2>
     <ul class="space-y-2 text-sm text-slate-300">
+      {% if role == 'seedbox' %}
+      <li class="flex gap-2">
+        <span class="text-violet-400 flex-shrink-0">•</span>
+        <span>
+          This is a public VPS — the service UIs are bound to loopback / behind Caddy's allowlist, not the public IP.
+          {% if tailnet_ip %}
+          Reach them over Tailscale at <code class="text-xs font-mono bg-slate-800 px-1 py-0.5 rounded text-slate-200">http://{{ tailnet_ip }}:&lt;port&gt;</code>,
+          {% else %}
+          Install Tailscale (or use an SSH tunnel) to reach them privately —
+          {% endif %}
+          never open these ports to the internet.
+        </span>
+      </li>
+      {% endif %}
       {% if compose_path %}
       <li class="flex gap-2">
         <span class="text-violet-400 flex-shrink-0">•</span>

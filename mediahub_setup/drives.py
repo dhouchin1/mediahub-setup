@@ -1,19 +1,24 @@
-"""External drive discovery.
+"""Drive discovery.
 
-Uses `diskutil list -plist external` to enumerate external drives,
-then enriches each with filesystem info and write-status via a
-temp-file probe (falling back to mount-flag inspection if the probe
-is denied).
+On macOS, uses `diskutil list -plist external` to enumerate external
+drives. On Linux (e.g. a VPS), uses `lsblk --json` (falling back to
+parsing `/proc/mounts`) to enumerate mounted data filesystems. Each
+drive is enriched with filesystem info and write-status via a temp-file
+probe. Selection dispatches on the OS via :mod:`platform_detect`.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import plistlib
 import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
+from pathlib import Path
+
+from . import platform_detect
 
 
 @dataclass
@@ -131,12 +136,14 @@ def _detect_writable(mount_path: str, filesystem: str) -> bool:
     """Return True if we can write to mount_path.
 
     Strategy:
-    1. NTFS is always read-only on stock macOS — short-circuit to False.
+    1. On macOS, NTFS is always read-only on the stock kernel —
+       short-circuit to False. (On Linux, ntfs-3g usually mounts it
+       writable, so we let the probe decide there.)
     2. Otherwise try to create + delete a temp file inside mount_path.
        Fall back to os.access check if the probe throws unexpectedly.
     """
     fs_upper = filesystem.upper()
-    if "NTFS" in fs_upper:
+    if "NTFS" in fs_upper and platform_detect.is_macos():
         return False
 
     try:
@@ -164,6 +171,12 @@ def _format_filesystem(raw: str) -> str:
         "Apple_HFS": "HFS+",
         "EXT4": "ext4",
         "EXT3": "ext3",
+        "EXT2": "ext2",
+        "BTRFS": "Btrfs",
+        "XFS": "XFS",
+        "ZFS": "ZFS",
+        "VFAT": "FAT32",
+        "F2FS": "F2FS",
     }
     upper = raw.upper()
     for key, label in mapping.items():
@@ -172,8 +185,8 @@ def _format_filesystem(raw: str) -> str:
     return raw or "Unknown"
 
 
-def list_drives() -> list[DriveInfo]:
-    """Enumerate writable/readable external drives.
+def _list_drives_macos() -> list[DriveInfo]:
+    """Enumerate writable/readable external drives via diskutil (macOS).
 
     Returns an empty list (never raises) so the UI always has something
     to show even when diskutil fails or no drives are attached.
@@ -234,6 +247,229 @@ def list_drives() -> list[DriveInfo]:
         )
 
     return drives
+
+
+# ---------------------------------------------------------------------------
+# Linux backend (lsblk, with a /proc/mounts fallback)
+# ---------------------------------------------------------------------------
+
+# Pseudo / virtual filesystems that are never a media drive.
+_VIRTUAL_FS = {
+    "squashfs",
+    "overlay",
+    "tmpfs",
+    "devtmpfs",
+    "proc",
+    "sysfs",
+    "ramfs",
+    "autofs",
+    "cgroup",
+    "cgroup2",
+    "mqueue",
+    "debugfs",
+    "tracefs",
+    "fusectl",
+    "configfs",
+    "efivarfs",
+    "bpf",
+    "pstore",
+    "securityfs",
+}
+# Mount points to skip on Linux: the OS lives here, not media. The data disk
+# on a tiny VPS may be `/` itself — in that case use the manual-path input.
+_LINUX_SKIP_PREFIXES = ("/proc", "/sys", "/run", "/dev", "/snap", "/var/lib/docker")
+_LINUX_SKIP_EXACT = {"/", "/boot", "/boot/efi", "/boot/firmware", "[SWAP]", ""}
+
+
+def _coerce_int(value: object) -> int:
+    """lsblk may return SIZE as an int (newer) or a string (older)."""
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0
+
+
+def _mount_of(dev: dict) -> str:
+    """Return a device's mount point, tolerating both the singular
+    ``mountpoint`` and the newer plural ``mountpoints`` lsblk fields."""
+    mount = dev.get("mountpoint")
+    if not mount:
+        mounts = dev.get("mountpoints")
+        if isinstance(mounts, list):
+            mount = next((m for m in mounts if m), None)
+    return mount or ""
+
+
+def _is_skippable_linux_mount(mount: str) -> bool:
+    if mount in _LINUX_SKIP_EXACT:
+        return True
+    return any(mount == p or mount.startswith(p + "/") for p in _LINUX_SKIP_PREFIXES)
+
+
+def _flatten_lsblk(devices: list[dict] | None):
+    """Yield every device + nested child from lsblk's tree."""
+    for dev in devices or []:
+        yield dev
+        yield from _flatten_lsblk(dev.get("children"))
+
+
+def _drive_from_mount(mount: str, *, fstype_raw: str, name: str, ro: bool) -> DriveInfo:
+    """Build a DriveInfo for a mounted Linux filesystem."""
+    filesystem = _format_filesystem(fstype_raw)
+    try:
+        usage = shutil.disk_usage(mount)
+        total_bytes, free_bytes = usage.total, usage.free
+    except OSError:
+        total_bytes = free_bytes = 0
+    writable = False if ro else _detect_writable(mount, filesystem)
+    return DriveInfo(
+        name=name or os.path.basename(mount) or mount,
+        mount_path=mount,
+        filesystem=filesystem,
+        total_bytes=total_bytes,
+        free_bytes=free_bytes,
+        writable=writable,
+    )
+
+
+def _parse_lsblk(data: dict) -> list[DriveInfo]:
+    """Turn parsed `lsblk --json` output into DriveInfo entries.
+
+    Pure function (no subprocess) so tests can inject a sample payload.
+    """
+    drives: list[DriveInfo] = []
+    seen: set[str] = set()
+    for dev in _flatten_lsblk(data.get("blockdevices", [])):
+        if dev.get("type") not in ("disk", "part", "lvm", "crypt"):
+            continue
+        mount = _mount_of(dev)
+        if _is_skippable_linux_mount(mount) or mount in seen:
+            continue
+        fstype = (dev.get("fstype") or "").lower()
+        if fstype in _VIRTUAL_FS:
+            continue
+        seen.add(mount)
+        ro = dev.get("ro") in (True, 1, "1")
+        drives.append(
+            _drive_from_mount(
+                mount,
+                fstype_raw=dev.get("fstype") or "",
+                name=dev.get("label") or "",
+                ro=ro,
+            )
+        )
+    return drives
+
+
+def _run_lsblk() -> str:
+    """Run lsblk and return JSON stdout, or empty string on failure."""
+    try:
+        result = subprocess.run(
+            [
+                "lsblk",
+                "--json",
+                "--paths",
+                "--bytes",
+                "-o",
+                "NAME,TYPE,SIZE,FSTYPE,MOUNTPOINT,RM,RO,LABEL",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if result.returncode == 0:
+            return result.stdout
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+    return ""
+
+
+def _unescape_proc_mount(field_value: str) -> str:
+    """Decode the octal escapes /proc/mounts uses for spaces etc."""
+    for esc, char in (("\\040", " "), ("\\011", "\t"), ("\\012", "\n"), ("\\134", "\\")):
+        field_value = field_value.replace(esc, char)
+    return field_value
+
+
+def _list_drives_proc_mounts() -> list[DriveInfo]:
+    """Fallback enumeration when lsblk is unavailable (minimal images)."""
+    drives: list[DriveInfo] = []
+    seen: set[str] = set()
+    try:
+        lines = Path("/proc/mounts").read_text().splitlines()
+    except OSError:
+        return drives
+    for line in lines:
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        device, mount, fstype = parts[0], _unescape_proc_mount(parts[1]), parts[2]
+        if not device.startswith("/dev/"):
+            continue
+        if fstype.lower() in _VIRTUAL_FS:
+            continue
+        if _is_skippable_linux_mount(mount) or mount in seen:
+            continue
+        seen.add(mount)
+        ro = len(parts) >= 4 and "ro" in parts[3].split(",")
+        drives.append(
+            _drive_from_mount(mount, fstype_raw=fstype, name=os.path.basename(mount), ro=ro)
+        )
+    return drives
+
+
+def _list_drives_linux() -> list[DriveInfo]:
+    """Enumerate mounted data filesystems on Linux."""
+    raw = _run_lsblk()
+    if raw:
+        try:
+            drives = _parse_lsblk(json.loads(raw))
+            if drives:
+                return drives
+        except (ValueError, KeyError, TypeError):
+            pass
+    return _list_drives_proc_mounts()
+
+
+def drive_from_path(path: str) -> DriveInfo | None:
+    """Build a DriveInfo for an arbitrary host directory (manual entry).
+
+    Returns None if *path* isn't an existing directory. Used by the drive
+    step's manual-path input — primarily for headless Linux servers where
+    the media location is a plain folder on the root disk rather than a
+    separately-mounted drive.
+    """
+    if not path:
+        return None
+    p = Path(path).expanduser()
+    if not p.is_dir():
+        return None
+    mount = str(p)
+    try:
+        usage = shutil.disk_usage(mount)
+        total_bytes, free_bytes = usage.total, usage.free
+    except OSError:
+        total_bytes = free_bytes = 0
+    return DriveInfo(
+        name=p.name or mount,
+        mount_path=mount,
+        filesystem="directory",
+        total_bytes=total_bytes,
+        free_bytes=free_bytes,
+        writable=_detect_writable(mount, ""),
+    )
+
+
+def list_drives() -> list[DriveInfo]:
+    """Enumerate writable/readable data drives for the current OS.
+
+    Never raises — returns an empty list when nothing is found so the UI
+    always has something to render.
+    """
+    if platform_detect.is_linux():
+        return _list_drives_linux()
+    return _list_drives_macos()
 
 
 def fmt_gb(n_bytes: int) -> str:

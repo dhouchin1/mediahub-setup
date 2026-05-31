@@ -7,7 +7,7 @@ import subprocess
 from flask import Blueprint, redirect, render_template, request, url_for
 
 from .. import drives as drive_lib
-from .. import state
+from .. import platform_detect, state
 
 bp = Blueprint("drive", __name__, url_prefix="/drive")
 
@@ -29,7 +29,10 @@ def _selected_drive() -> drive_lib.DriveInfo | None:
 
 def _template_globals() -> dict:
     """Extra template variables shared by all drive views."""
-    return {"drives_fmt_gb": drive_lib.fmt_gb}
+    return {
+        "drives_fmt_gb": drive_lib.fmt_gb,
+        "is_macos": platform_detect.is_macos(),
+    }
 
 
 @bp.get("/")
@@ -62,9 +65,13 @@ def pick():
     if not mount_path:
         return redirect(url_for("drive.index"))
 
-    # Find the matching DriveInfo so we persist full metadata.
+    # Find the matching DriveInfo so we persist full metadata. If the path
+    # isn't in the enumerated list (e.g. a manually-typed folder on a Linux
+    # VPS), build a DriveInfo for it directly.
     all_drives = drive_lib.list_drives()
     chosen = next((d for d in all_drives if d.mount_path == mount_path), None)
+    if chosen is None:
+        chosen = drive_lib.drive_from_path(mount_path)
 
     if chosen is None or not chosen.writable:
         return redirect(url_for("drive.index"))
@@ -87,9 +94,10 @@ def pick():
 
 @bp.post("/open-disk-utility")
 def open_disk_utility():
-    """Launch macOS Disk Utility as a background process."""
-    try:
-        subprocess.Popen(["open", "-a", "Disk Utility"])
-    except OSError:
-        pass
+    """Launch macOS Disk Utility as a background process (no-op elsewhere)."""
+    if platform_detect.is_macos():
+        try:
+            subprocess.Popen(["open", "-a", "Disk Utility"])
+        except OSError:
+            pass
     return redirect(url_for("drive.index"))

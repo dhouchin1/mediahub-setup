@@ -14,8 +14,11 @@
          const i = this.enabled.indexOf(key);
          if (i === -1) {
            this.enabled.push(key);
-           // Auto-enable jellyfin/sonarr/radarr deps for jellyseerr
+           // Auto-enable jellyfin for jellyseerr (Sonarr/Radarr are core, always on)
            if (key === 'jellyseerr' && !this.enabled.includes('jellyfin')) this.enabled.push('jellyfin');
+           // Overseerr and the custom web UI auto-enable nothing beyond core,
+           // but if the user picks both Overseerr *and* Jellyseerr, warn them —
+           // they collide on the default request-app port range.
          } else {
            this.enabled.splice(i, 1);
          }
@@ -105,6 +108,26 @@
     <p class="text-xs text-slate-500 -mt-4">
       Run <code class="text-slate-300 bg-slate-800 px-1 rounded">id</code> in Terminal if you're unsure. These match your current user.
     </p>
+
+    {% if role != 'receiver' %}
+    <!-- qBittorrent username -->
+    <div>
+      <label for="qbittorrent_username" class="text-sm font-medium text-slate-300 mb-1 block">
+        qBittorrent username
+      </label>
+      <input
+        id="qbittorrent_username"
+        name="qbittorrent_username"
+        type="text"
+        value="{{ qbittorrent_username | default('admin') }}"
+        placeholder="admin"
+        class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 focus:border-violet-500 focus:ring-1 focus:ring-violet-500 w-full sm:w-1/2"
+      />
+      <p class="text-xs text-slate-500 mt-1">
+        Used for qBittorrent and the Sonarr/Radarr download client. Default is <code class="text-slate-300 bg-slate-800 px-1 rounded">admin</code>.
+      </p>
+    </div>
+    {% endif %}
 
     <!-- Auto-generate password toggle -->
     <div class="rounded-xl p-5 bg-slate-900/40 border border-slate-700/50 space-y-4">
@@ -229,13 +252,75 @@
         </p>
       </div>
 
-      <!-- Caddy domain field -->
-      <div x-show="isEnabled('caddy')" x-cloak class="space-y-3 pt-3 border-t border-slate-700/50">
+      <!-- Recyclarr profile picker -->
+      <div x-show="isEnabled('recyclarr')" x-cloak class="space-y-3 pt-3 border-t border-slate-700/50">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wider text-lime-300/80 mb-2">Recyclarr profiles</p>
+          <p class="text-xs text-slate-400 mb-3">Pick TRaSH Guides quality profiles to sync nightly. You can edit <code class="text-slate-300 bg-slate-800 px-1 rounded">~/mediahub/config/recyclarr/recyclarr.yml</code> later to add more.</p>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <p class="text-xs font-medium text-slate-300 mb-2">Sonarr (TV)</p>
+            <div class="space-y-2">
+              {% for key, profile in sonarr_recyclarr_profiles.items() %}
+              <label class="flex items-start gap-2 rounded-md p-2 bg-slate-900/30 border border-slate-700/40 hover:border-slate-600 cursor-pointer transition">
+                <input type="checkbox"
+                       name="recyclarr_sonarr_profiles"
+                       value="{{ key }}"
+                       {% if key in (recyclarr_profiles.sonarr if recyclarr_profiles else []) %}checked{% endif %}
+                       class="mt-1 w-3.5 h-3.5 rounded border-slate-600 bg-slate-800 text-lime-500 focus:ring-lime-500 focus:ring-offset-0 cursor-pointer" />
+                <div class="flex-1 min-w-0">
+                  <div class="text-xs font-medium text-slate-200">{{ profile.name }}</div>
+                  <div class="text-[10px] text-slate-400 mt-0.5">{{ profile.description }}</div>
+                </div>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+          <div>
+            <p class="text-xs font-medium text-slate-300 mb-2">Radarr (Movies)</p>
+            <div class="space-y-2">
+              {% for key, profile in radarr_recyclarr_profiles.items() %}
+              <label class="flex items-start gap-2 rounded-md p-2 bg-slate-900/30 border border-slate-700/40 hover:border-slate-600 cursor-pointer transition">
+                <input type="checkbox"
+                       name="recyclarr_radarr_profiles"
+                       value="{{ key }}"
+                       {% if key in (recyclarr_profiles.radarr if recyclarr_profiles else []) %}checked{% endif %}
+                       class="mt-1 w-3.5 h-3.5 rounded border-slate-600 bg-slate-800 text-lime-500 focus:ring-lime-500 focus:ring-offset-0 cursor-pointer" />
+                <div class="flex-1 min-w-0">
+                  <div class="text-xs font-medium text-slate-200">{{ profile.name }}</div>
+                  <div class="text-[10px] text-slate-400 mt-0.5">{{ profile.description }}</div>
+                </div>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        <p class="text-[11px] text-slate-500">
+          If you uncheck everything, the wizard falls back to the safe defaults (WEB-1080p + HD Bluray + WEB).
+        </p>
+      </div>
+
+      <!-- Caddy reverse-proxy options -->
+      <div x-show="isEnabled('caddy')" x-cloak class="space-y-3 pt-3 border-t border-slate-700/50"
+           x-data="{ caddyMode: '{{ caddy.mode if caddy and caddy.mode else 'local' }}' }">
         <div>
           <p class="text-xs font-semibold uppercase tracking-wider text-sky-300/80 mb-2">Caddy reverse proxy</p>
-          <p class="text-xs text-slate-400 mb-3">All services accessible under one hostname. Local domains stay HTTP; public domains get auto-HTTPS via Let's Encrypt.</p>
+          <p class="text-xs text-slate-400 mb-3">Pick how the proxy exposes your services.</p>
         </div>
         <div>
+          <label class="text-xs font-medium text-slate-300 mb-1 block">Mode</label>
+          <select name="caddy_mode" x-model="caddyMode"
+                  class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500 w-full">
+            <option value="local">Local — per-port + IP allowlist (LAN / Tailscale)</option>
+            <option value="public">Public — one hostname + auto-HTTPS</option>
+          </select>
+          <p class="text-[11px] text-slate-500 mt-1">
+            Local mode publishes each service on its own port and only accepts requests from RFC1918 + Tailscale ranges.
+            Public mode routes everything under one hostname and requests a Let's Encrypt cert (needs ports 80/443 open).
+          </p>
+        </div>
+        <div x-show="caddyMode === 'public'" x-cloak>
           <label class="text-xs font-medium text-slate-300 mb-1 block">Hostname</label>
           <input
             type="text"
@@ -249,7 +334,157 @@
           </p>
         </div>
       </div>
+
+      <!-- Syncthing library sync -->
+      <div x-show="isEnabled('syncthing')" x-cloak class="space-y-3 pt-3 border-t border-slate-700/50">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wider text-teal-300/80 mb-2">Syncthing library sync</p>
+          <p class="text-xs text-slate-400 mb-3">
+            Replicates the organised <code class="text-slate-300 bg-slate-800 px-1 rounded">Media/</code> library between this machine and its peer.
+            {% if role == 'seedbox' %}
+            This seedbox sends <strong class="text-slate-200">Send-Only</strong> &mdash; pair it with your home receiver.
+            {% elif role == 'receiver' %}
+            This receiver is <strong class="text-slate-200">Receive-Only with versioning forced on</strong>: deletes on the seedbox are parked in <code>.stversions</code>, never lost.
+            {% else %}
+            Defaults to Send-Only; the peer should be Receive-Only with versioning.
+            {% endif %}
+          </p>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-medium text-slate-300 mb-1 block">Folder label</label>
+            <input type="text" name="syncthing_folder_label"
+              value="{{ syncthing.folder_label if syncthing else 'MediaHub Library' }}"
+              placeholder="MediaHub Library"
+              class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 text-sm focus:border-teal-500 focus:ring-1 focus:ring-teal-500 w-full" />
+          </div>
+          <div>
+            <label class="text-xs font-medium text-slate-300 mb-1 block">Folder ID <span class="text-slate-500">(same on both peers)</span></label>
+            <input type="text" name="syncthing_folder_id"
+              value="{{ syncthing.folder_id if syncthing else 'mediahub-media' }}"
+              placeholder="mediahub-media"
+              class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 font-mono text-xs focus:border-teal-500 focus:ring-1 focus:ring-teal-500 w-full" />
+          </div>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-slate-300 mb-1 block">Peer device ID <span class="text-slate-500">(optional — paste the other machine's Syncthing ID)</span></label>
+          <input type="text" name="syncthing_remote_device_id"
+            value="{{ syncthing.remote_device_id if syncthing else '' }}"
+            placeholder="XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX"
+            class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 font-mono text-xs focus:border-teal-500 focus:ring-1 focus:ring-teal-500 w-full" />
+          <p class="text-[11px] text-slate-500 mt-1">
+            Leave blank if you don't have it yet — this machine's device ID appears on the final screen, then add the peer from either Syncthing UI.
+          </p>
+        </div>
+      </div>
+
+      <!-- Gluetun VPN egress -->
+      <div x-show="isEnabled('gluetun')" x-cloak class="space-y-3 pt-3 border-t border-slate-700/50"
+           x-data="{ vpnType: '{{ gluetun.vpn_type if gluetun else 'wireguard' }}' }">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wider text-rose-300/80 mb-2">qBittorrent VPN egress (Gluetun)</p>
+          <p class="text-xs text-slate-400 mb-3">
+            Routes all qBittorrent traffic through a VPN tunnel — recommended on a VPS whose provider restricts P2P.
+            Pick a provider that permits port forwarding for healthy seeding, respect its terms, and only host content you have the right to.
+          </p>
+        </div>
+        {% if errors.gluetun %}<p class="text-rose-300 text-xs">{{ errors.gluetun }}</p>{% endif %}
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-medium text-slate-300 mb-1 block">Provider</label>
+            <input type="text" name="gluetun_provider"
+              value="{{ gluetun.provider if gluetun else 'mullvad' }}" placeholder="mullvad"
+              class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 text-sm focus:border-rose-500 focus:ring-1 focus:ring-rose-500 w-full {% if errors.gluetun_provider %}border-rose-500{% endif %}" />
+            <p class="text-[11px] text-slate-500 mt-1">Gluetun's <code>VPN_SERVICE_PROVIDER</code> — e.g. mullvad, protonvpn, private internet access.</p>
+          </div>
+          <div>
+            <label class="text-xs font-medium text-slate-300 mb-1 block">VPN type</label>
+            <select name="gluetun_vpn_type" x-model="vpnType"
+              class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 text-sm focus:border-rose-500 focus:ring-1 focus:ring-rose-500 w-full">
+              <option value="wireguard">WireGuard</option>
+              <option value="openvpn">OpenVPN</option>
+            </select>
+          </div>
+        </div>
+        <div x-show="vpnType === 'wireguard'" class="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-medium text-slate-300 mb-1 block">WireGuard private key</label>
+            <input type="password" name="gluetun_wireguard_private_key"
+              value="{{ gluetun.wireguard_private_key if gluetun else '' }}"
+              class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 font-mono text-xs focus:border-rose-500 focus:ring-1 focus:ring-rose-500 w-full" />
+          </div>
+          <div>
+            <label class="text-xs font-medium text-slate-300 mb-1 block">WireGuard addresses</label>
+            <input type="text" name="gluetun_wireguard_addresses"
+              value="{{ gluetun.wireguard_addresses if gluetun else '' }}" placeholder="10.64.0.2/32"
+              class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 font-mono text-xs focus:border-rose-500 focus:ring-1 focus:ring-rose-500 w-full" />
+          </div>
+        </div>
+        <div x-show="vpnType === 'openvpn'" x-cloak class="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-medium text-slate-300 mb-1 block">OpenVPN username</label>
+            <input type="text" name="gluetun_openvpn_user"
+              value="{{ gluetun.openvpn_user if gluetun else '' }}"
+              class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 text-sm focus:border-rose-500 focus:ring-1 focus:ring-rose-500 w-full" />
+          </div>
+          <div>
+            <label class="text-xs font-medium text-slate-300 mb-1 block">OpenVPN password</label>
+            <input type="password" name="gluetun_openvpn_password"
+              value="{{ gluetun.openvpn_password if gluetun else '' }}"
+              class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 text-sm focus:border-rose-500 focus:ring-1 focus:ring-rose-500 w-full" />
+          </div>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-3 items-center">
+          <div>
+            <label class="text-xs font-medium text-slate-300 mb-1 block">Server countries <span class="text-slate-500">(optional)</span></label>
+            <input type="text" name="gluetun_server_countries"
+              value="{{ gluetun.server_countries if gluetun else '' }}" placeholder="Netherlands,Switzerland"
+              class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 text-sm focus:border-rose-500 focus:ring-1 focus:ring-rose-500 w-full" />
+          </div>
+          <label class="flex items-center gap-2 sm:mt-5">
+            <input type="checkbox" name="gluetun_port_forwarding"
+              {% if not gluetun or gluetun.port_forwarding %}checked{% endif %}
+              class="w-4 h-4 rounded border-slate-600 bg-slate-800 text-rose-500 focus:ring-rose-500" />
+            <span class="text-xs text-slate-300">Enable VPN port forwarding (needed for seeding)</span>
+          </label>
+        </div>
+      </div>
     </div>
+
+    {% if role == 'seedbox' %}
+    <!-- Seedbox retention -->
+    <div class="rounded-xl p-5 bg-slate-900/40 border border-slate-700/50 space-y-4">
+      <div>
+        <p class="text-sm font-medium text-slate-200">Seedbox retention</p>
+        <p class="text-xs text-slate-400 mt-0.5">
+          Cap seeding so a small VPS disk auto-prunes. Your home copy stays safe — pruning a seeded
+          torrent only removes the <code class="text-slate-300 bg-slate-800 px-1 rounded">Torrents/</code>
+          copy; the hardlinked <code class="text-slate-300 bg-slate-800 px-1 rounded">Media/</code> library Syncthing replicates survives.
+        </p>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div>
+          <label class="text-xs font-medium text-slate-300 mb-1 block">Seed ratio</label>
+          <input type="number" step="0.1" min="0" name="retention_seed_ratio"
+            value="{{ retention.seed_ratio if retention else 2.0 }}"
+            class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 text-sm focus:border-violet-500 focus:ring-1 focus:ring-violet-500 w-full" />
+        </div>
+        <div>
+          <label class="text-xs font-medium text-slate-300 mb-1 block">Seed time (minutes)</label>
+          <input type="number" min="0" name="retention_seed_time_minutes"
+            value="{{ retention.seed_time_minutes if retention else 10080 }}"
+            class="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-slate-100 text-sm focus:border-violet-500 focus:ring-1 focus:ring-violet-500 w-full" />
+          <p class="text-[11px] text-slate-500 mt-1">10080 = 7 days. Whichever limit is hit first fires the action.</p>
+        </div>
+      </div>
+      <label class="flex items-center gap-2">
+        <input type="checkbox" name="retention_remove_on_limit"
+          {% if not retention or retention.remove_on_limit %}checked{% endif %}
+          class="w-4 h-4 rounded border-slate-600 bg-slate-800 text-violet-500 focus:ring-violet-500" />
+        <span class="text-xs text-slate-300">Remove torrent &amp; delete files when the limit is reached (frees disk)</span>
+      </label>
+    </div>
+    {% endif %}
 
     <!-- Port overrides (collapsible) -->
     <div class="rounded-xl border border-slate-700/50 overflow-hidden">
@@ -276,16 +511,19 @@
           ("sonarr",          "Sonarr (TV)",            8989, None),
           ("radarr",          "Radarr (Movies)",         7878, None),
           ("prowlarr",        "Prowlarr (Indexers)",     9696, None),
-          ("qbittorrent_web", "qBittorrent Web UI",      8080, None),
+          ("qbittorrent_web", "qBittorrent Web UI",      8090, None),
           ("qbittorrent_bt",  "qBittorrent BT",           6881, None),
         ] %}
         {% set optional_port_fields = [
           ("jellyfin",        "Jellyfin",                 8096, "jellyfin"),
-          ("jellyseerr",      "Jellyseerr",               5055, "jellyseerr"),
+          ("overseerr",       "Overseerr",                5055, "overseerr"),
+          ("jellyseerr",      "Jellyseerr",               5056, "jellyseerr"),
           ("bazarr",          "Bazarr",                   6767, "bazarr"),
+          ("web",             "MediaHub Web UI",          3000, "web"),
           ("flaresolverr",    "Flaresolverr",             8191, "flaresolverr"),
           ("notifiarr",       "Notifiarr",                5454, "notifiarr"),
           ("caddy",           "Caddy",                    80,   "caddy"),
+          ("syncthing",       "Syncthing",                8384, "syncthing"),
         ] %}
 
         <div class="grid sm:grid-cols-2 gap-4">

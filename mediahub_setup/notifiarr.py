@@ -45,6 +45,7 @@ def render_notifiarr_config(
     shared_password: str,
     telegram_bot_token: str = "",
     telegram_chat_id: str = "",
+    qbittorrent_username: str = "admin",
 ) -> str:
     """Build the notifiarr.conf TOML string."""
     sonarr_key = api_keys.get("sonarr", "")
@@ -56,7 +57,7 @@ def render_notifiarr_config(
         "# https://notifiarr.wiki",
         "",
         "bind_addr = '0.0.0.0:5454'",
-        f"ui_password = 'admin:{shared_password}'",
+        f"ui_password = '{qbittorrent_username}:{shared_password}'",
         "log_file = '/config/notifiarr.log'",
         "log_files = 10",
         "log_file_mb = 100",
@@ -93,7 +94,7 @@ def render_notifiarr_config(
         "[[apps.qbit]]",
         "name = 'qBittorrent'",
         f"url = 'http://qbittorrent:{qb_port}'",
-        "user = 'admin'",
+        f"user = '{qbittorrent_username}'",
         f"pass = '{shared_password}'",
         "interval = '5m'",
         "timeout = '1m'",
@@ -137,6 +138,7 @@ def configure_notifiarr_telegram(
     shared_password: str,
     telegram_bot_token: str = "",
     telegram_chat_id: str = "",
+    qbittorrent_username: str = "admin",
 ) -> Path:
     """Write notifiarr.conf and restart the container so it picks it up."""
     NOTIFIARR_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -148,6 +150,7 @@ def configure_notifiarr_telegram(
             shared_password=shared_password,
             telegram_bot_token=telegram_bot_token,
             telegram_chat_id=telegram_chat_id,
+            qbittorrent_username=qbittorrent_username,
         )
     )
     # Best-effort restart so the new config is picked up. Non-fatal if it

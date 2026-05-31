@@ -1,12 +1,20 @@
 """Caddy reverse proxy config generator.
 
-Generates a Caddyfile that exposes all enabled services under one
-hostname. Each service is reachable at `<scheme>://<domain>/<svc>/`.
+Supports two modes:
 
-For a `.local` domain, Caddy serves plain HTTP (Caddy will not request
-Let's Encrypt for `.local` hostnames). For a public domain, Caddy will
-automatically request a Let's Encrypt cert on first request, provided
-ports 80/443 are reachable from the internet.
+* ``local`` (default) — one site-block per service on its own port,
+  guarded by an IP allowlist (loopback + RFC1918 + 100.64.0.0/10 for
+  Tailscale). Use this when the stack is reachable only from your LAN
+  or Tailnet. No TLS — Caddy serves plain HTTP on the configured ports.
+
+* ``public`` — one hostname with path routing (``example.com/sonarr/``,
+  ``/radarr/``, …). Caddy automatically requests Let's Encrypt certs on
+  first request, provided ports 80/443 are reachable from the internet.
+  Use this when you want a single hostname for remote access.
+
+The generator only emits site-blocks for services that are actually
+installed, so the Caddyfile stays in sync with the enabled-services
+selection.
 """
 
 from __future__ import annotations
@@ -17,56 +25,181 @@ INSTALL_DIR = Path.home() / "mediahub"
 CADDY_CONFIG_DIR = INSTALL_DIR / "config" / "caddy"
 
 
-# (service_key, route_path, internal_host, internal_port)
-DEFAULT_ROUTES: list[tuple[str, str, str, int]] = [
-    ("sonarr", "/sonarr", "sonarr", 8989),
-    ("radarr", "/radarr", "radarr", 7878),
-    ("prowlarr", "/prowlarr", "prowlarr", 9696),
-    ("qbittorrent", "/qbittorrent", "qbittorrent", 8080),
-    ("jellyfin", "/jellyfin", "jellyfin", 8096),
-    ("jellyseerr", "/jellyseerr", "jellyseerr", 5055),
-    ("bazarr", "/bazarr", "bazarr", 6767),
-    ("notifiarr", "/notifiarr", "notifiarr", 5454),
-    ("flaresolverr", "/flaresolverr", "flaresolverr", 8191),
+# Tuple format: (service_key, route_path, internal_host, internal_port_or_None).
+# A None port means "look it up from the runtime ports dict".
+DEFAULT_ROUTES: list[tuple[str, str, str, int | None]] = [
+    ("sonarr", "/sonarr", "sonarr", None),
+    ("radarr", "/radarr", "radarr", None),
+    ("prowlarr", "/prowlarr", "prowlarr", None),
+    ("qbittorrent", "/qbittorrent", "qbittorrent", None),
+    ("jellyfin", "/jellyfin", "jellyfin", None),
+    ("overseerr", "/overseerr", "overseerr", None),
+    ("jellyseerr", "/jellyseerr", "jellyseerr", None),
+    ("bazarr", "/bazarr", "bazarr", None),
+    ("web", "/", "web", None),
+    ("notifiarr", "/notifiarr", "notifiarr", None),
+    ("flaresolverr", "/flaresolverr", "flaresolverr", None),
+    ("syncthing", "/syncthing", "syncthing", None),
 ]
 
 
-def render_caddyfile(*, domain: str, enabled: list[str], ports: dict[str, int]) -> Path:
-    """Write the Caddyfile under ~/mediahub/config/caddy/."""
-    CADDY_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+# Map service_key to the port_key used in the runtime ports dict.
+_PORT_KEY = {
+    "sonarr": "sonarr",
+    "radarr": "radarr",
+    "prowlarr": "prowlarr",
+    "qbittorrent": "qbittorrent_web",
+    "jellyfin": "jellyfin",
+    "overseerr": "overseerr",
+    "jellyseerr": "jellyseerr",
+    "bazarr": "bazarr",
+    "web": "web",
+    "notifiarr": "notifiarr",
+    "flaresolverr": "flaresolverr",
+    "syncthing": "syncthing",
+}
 
-    # For all routes whose service key is core ("sonarr"/"radarr"/...) or
-    # whose key is in `enabled`, emit a reverse-proxy stanza.
-    always_on = {"sonarr", "radarr", "prowlarr", "qbittorrent"}
-    active_routes = [
-        (key, path, host, port)
-        for key, path, host, port in DEFAULT_ROUTES
-        if key in always_on or key in enabled
+# Default internal container ports — Caddy reverse-proxies to these
+# regardless of the host-side port the user chose.
+_INTERNAL_PORT = {
+    "sonarr": 8989,
+    "radarr": 7878,
+    "prowlarr": 9696,
+    "qbittorrent": 8090,
+    "jellyfin": 8096,
+    "overseerr": 5055,
+    "jellyseerr": 5055,
+    "bazarr": 6767,
+    "web": 3000,
+    "notifiarr": 5454,
+    "flaresolverr": 8191,
+    "syncthing": 8384,
+}
+
+_ALWAYS_ON = {"sonarr", "radarr", "prowlarr", "qbittorrent"}
+
+
+def _active_routes(
+    enabled: list[str], qbittorrent_host: str = "qbittorrent"
+) -> list[tuple[str, str, str, int]]:
+    """Filter DEFAULT_ROUTES to services that are core or in *enabled*.
+
+    When qBittorrent egresses through Gluetun it is reachable as the gluetun
+    container, so its reverse-proxy upstream host is overridden.
+    """
+    out: list[tuple[str, str, str, int]] = []
+    for key, path, host, _ in DEFAULT_ROUTES:
+        if key in _ALWAYS_ON or key in enabled:
+            upstream = qbittorrent_host if key == "qbittorrent" else host
+            out.append((key, path, upstream, _INTERNAL_PORT[key]))
+    return out
+
+
+def _render_local(
+    enabled: list[str], ports: dict[str, int], qbittorrent_host: str = "qbittorrent"
+) -> str:
+    """Per-port site blocks with IP allowlist — for LAN / Tailscale use."""
+    lines: list[str] = [
+        "# Caddyfile — generated by mediahub-setup (mode: local)",
+        "# Reload with: docker exec mediahub-caddy caddy reload --config /etc/caddy/Caddyfile",
+        "",
+        "{",
+        "    admin off",
+        "}",
+        "",
+        "# IP allowlist — loopback + RFC1918 + 100.64.0.0/10 (Tailscale)",
+        "(local_only) {",
+        "    @blocked not remote_ip 127.0.0.0/8 100.64.0.0/10 192.168.0.0/16 10.0.0.0/8",
+        "    abort @blocked",
+        "}",
+        "",
     ]
 
+    for key, _path, host, internal_port in _active_routes(enabled, qbittorrent_host):
+        port_key = _PORT_KEY[key]
+        host_port = ports.get(port_key, internal_port)
+        lines.append(f":{host_port} {{")
+        lines.append("    import local_only")
+        if key == "web":
+            lines.append(f"    reverse_proxy {host}:{internal_port}")
+        else:
+            lines.append(f"    reverse_proxy {host}:{internal_port} {{")
+            lines.append('        header_up X-Forwarded-User "admin"')
+            lines.append("    }")
+        lines.append("}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _render_public(
+    domain: str,
+    enabled: list[str],
+    ports: dict[str, int],
+    qbittorrent_host: str = "qbittorrent",
+) -> str:
+    """Single-host path-routed config — for public HTTPS access."""
     is_local = domain.endswith(".local") or domain in ("localhost", "127.0.0.1")
     site_address = f"http://{domain}" if is_local else domain
 
     lines: list[str] = [
-        "# Caddyfile — generated by mediahub-setup",
+        "# Caddyfile — generated by mediahub-setup (mode: public)",
         "# Reload with: docker exec mediahub-caddy caddy reload --config /etc/caddy/Caddyfile",
         "",
         f"{site_address} {{",
     ]
-    for key, path, host, port in active_routes:
-        # Use port from settings if user overrode the internal default
-        internal_port = ports.get(key, port) if not key.startswith("qbit") else port
+    for key, path, host, internal_port in _active_routes(enabled, qbittorrent_host):
+        if key == "web":
+            # Web is the landing page in public mode — handled at /
+            continue
         lines.append(f"    handle_path {path}/* {{")
         lines.append(f"        reverse_proxy {host}:{internal_port}")
         lines.append("    }")
+
+    # Landing: if web is enabled it's the catch-all; else redirect to
+    # overseerr/jellyseerr (request UI) or fall back to sonarr.
     lines.append("")
-    lines.append("    # Redirect bare hostname to Jellyseerr if installed, else Sonarr.")
-    lines.append("    handle / {")
-    landing = "/jellyseerr/" if "jellyseerr" in enabled else "/sonarr/"
-    lines.append(f"        redir {landing} permanent")
-    lines.append("    }")
+    lines.append("    # Bare-path landing")
+    if "web" in enabled:
+        lines.append("    handle / {")
+        lines.append(f"        reverse_proxy web:{_INTERNAL_PORT['web']}")
+        lines.append("    }")
+    else:
+        landing = (
+            "/overseerr/"
+            if "overseerr" in enabled
+            else "/jellyseerr/"
+            if "jellyseerr" in enabled
+            else "/sonarr/"
+        )
+        lines.append("    handle / {")
+        lines.append(f"        redir {landing} permanent")
+        lines.append("    }")
     lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
+def render_caddyfile(
+    *,
+    domain: str = "mediahub.local",
+    enabled: list[str],
+    ports: dict[str, int],
+    mode: str = "local",
+    qbittorrent_host: str = "qbittorrent",
+) -> Path:
+    """Write the Caddyfile under ``~/mediahub/config/caddy/``.
+
+    ``mode`` selects ``"local"`` (per-port + IP allowlist) or ``"public"``
+    (path-routed with auto-HTTPS). ``qbittorrent_host`` overrides qBittorrent's
+    upstream host (set to ``"gluetun"`` when it egresses through the VPN).
+    """
+    CADDY_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+    if mode == "public":
+        content = _render_public(domain, enabled, ports, qbittorrent_host)
+    else:
+        content = _render_local(enabled, ports, qbittorrent_host)
 
     caddyfile = CADDY_CONFIG_DIR / "Caddyfile"
-    caddyfile.write_text("\n".join(lines) + "\n")
+    caddyfile.write_text(content if content.endswith("\n") else content + "\n")
     return caddyfile

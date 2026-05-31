@@ -17,10 +17,37 @@ def test_core_keys_returns_four():
 
 
 def test_optional_keys_includes_expected():
-    """optional_keys() must include jellyfin, jellyseerr, bazarr and others."""
+    """optional_keys() must include the request apps, web UI, and helpers."""
     keys = services.optional_keys()
-    for expected in ("jellyfin", "jellyseerr", "bazarr", "flaresolverr", "notifiarr", "recyclarr"):
+    for expected in (
+        "jellyfin",
+        "overseerr",
+        "jellyseerr",
+        "bazarr",
+        "web",
+        "flaresolverr",
+        "notifiarr",
+        "recyclarr",
+    ):
         assert expected in keys, f"expected {expected!r} in optional_keys()"
+
+
+def test_overseerr_uses_sctx_image():
+    """Default request app is sctx/overseerr (matches the canonical stack)."""
+    assert services.OVERSEERR["image"] == "sctx/overseerr:latest"
+    assert services.OVERSEERR["default_port"] == 5055
+
+
+def test_web_service_present_and_pulls_default_image():
+    """The custom MediaHub web UI ships as an optional service with a default image."""
+    assert "web" in services.OPTIONAL
+    assert services.WEB["default_port"] == 3000
+    assert services.WEB["internal_port"] == 3000
+
+
+def test_qbittorrent_default_port_is_8090():
+    """qBittorrent moved to 8090 (8080 conflicts with too many things)."""
+    assert services.QBITTORRENT["default_port"] == 8090
 
 
 def test_resolve_dependencies_adds_jellyfin_when_jellyseerr_chosen():
@@ -62,6 +89,24 @@ def test_enabled_keys_preserves_catalog_order():
     optional_in_result = [k for k in enabled if k not in core]
     catalog_order = [k for k in services.optional_keys() if k in optional_in_result]
     assert optional_in_result == catalog_order
+
+
+def test_syncthing_is_optional_with_expected_fields():
+    """Syncthing is registered as an optional service with the right shape."""
+    assert "syncthing" in services.OPTIONAL
+    svc = services.SYNCTHING
+    assert svc["image"] == "syncthing/syncthing:latest"
+    assert svc["container_name"] == "mediahub-syncthing"
+    assert svc["port_key"] == "syncthing"
+    assert svc["default_port"] == 8384
+    assert svc["depends_on"] == []
+
+
+def test_gluetun_is_optional_with_empty_port_key():
+    """Gluetun is an optional infra service with no UI port of its own."""
+    assert "gluetun" in services.OPTIONAL
+    assert services.GLUETUN["port_key"] == ""
+    assert services.GLUETUN["image"] == "qmcgaw/gluetun:latest"
 
 
 def test_all_services_have_required_fields():

@@ -193,6 +193,42 @@ class TestQBittorrentClient:
 
         assert call_count["post"] == 1
 
+    def test_set_listen_port_posts_preferences(self):
+        import json
+
+        mock_post = MagicMock(return_value=_text_response(""))
+        with patch.object(self.qb._session, "post", mock_post):
+            self.qb.set_listen_port(51820)
+        assert "setPreferences" in mock_post.call_args[0][0]
+        payload = json.loads(mock_post.call_args.kwargs["data"]["json"])
+        assert payload["listen_port"] == 51820
+        assert payload["random_port"] is False
+
+    def test_share_limits_remove_uses_action_2(self):
+        import json
+
+        mock_post = MagicMock(return_value=_text_response(""))
+        with patch.object(self.qb._session, "post", mock_post):
+            self.qb.set_global_share_limits(
+                ratio=2.0, seeding_time_minutes=10080, remove_on_limit=True
+            )
+        payload = json.loads(mock_post.call_args.kwargs["data"]["json"])
+        assert payload["max_ratio"] == 2.0
+        assert payload["max_seeding_time"] == 10080
+        assert payload["max_ratio_act"] == 2  # remove torrent + delete files
+
+    def test_share_limits_pause_uses_action_0(self):
+        import json
+
+        mock_post = MagicMock(return_value=_text_response(""))
+        with patch.object(self.qb._session, "post", mock_post):
+            self.qb.set_global_share_limits(
+                ratio=1.0, seeding_time_minutes=0, remove_on_limit=False
+            )
+        payload = json.loads(mock_post.call_args.kwargs["data"]["json"])
+        assert payload["max_ratio_act"] == 0
+        assert payload["max_seeding_time_enabled"] is False
+
 
 # ---------------------------------------------------------------------------
 # ArrClient header auth test
@@ -378,7 +414,7 @@ class TestSonarrClient:
         assert fields["tvCategory"] == "tv"
 
     def test_enable_hardlinks_skips_when_already_on(self):
-        current = {"hardlinkCopyFiles": True, "id": 1}
+        current = {"copyUsingHardlinks": True, "id": 1}
         mock_get = MagicMock(return_value=_ok_response(current))
         mock_put = MagicMock()
         with patch.object(self.sonarr._session, "get", mock_get):
@@ -387,15 +423,15 @@ class TestSonarrClient:
         mock_put.assert_not_called()
 
     def test_enable_hardlinks_puts_when_off(self):
-        current = {"hardlinkCopyFiles": False, "id": 1}
+        current = {"copyUsingHardlinks": False, "id": 1}
         mock_get = MagicMock(return_value=_ok_response(current))
-        mock_put = MagicMock(return_value=_ok_response({"hardlinkCopyFiles": True, "id": 1}))
+        mock_put = MagicMock(return_value=_ok_response({"copyUsingHardlinks": True, "id": 1}))
         with patch.object(self.sonarr._session, "get", mock_get):
             with patch.object(self.sonarr._session, "put", mock_put):
                 self.sonarr.enable_hardlinks()
         mock_put.assert_called_once()
         put_payload = mock_put.call_args[1]["json"]
-        assert put_payload["hardlinkCopyFiles"] is True
+        assert put_payload["copyUsingHardlinks"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -433,9 +469,9 @@ class TestRadarrClient:
         assert fields["movieCategory"] == "movies"
 
     def test_enable_hardlinks_puts_when_off(self):
-        current = {"hardlinkCopyFiles": False, "id": 1}
+        current = {"copyUsingHardlinks": False, "id": 1}
         mock_get = MagicMock(return_value=_ok_response(current))
-        mock_put = MagicMock(return_value=_ok_response({"hardlinkCopyFiles": True, "id": 1}))
+        mock_put = MagicMock(return_value=_ok_response({"copyUsingHardlinks": True, "id": 1}))
         with patch.object(self.radarr._session, "get", mock_get):
             with patch.object(self.radarr._session, "put", mock_put):
                 self.radarr.enable_hardlinks()

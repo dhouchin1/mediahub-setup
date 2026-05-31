@@ -2,7 +2,7 @@
 
 > **From blank Mac to fully wired self-hosted media server in ~15 minutes — no config files to hand-edit, no API keys to copy-paste.**
 
-A 7-step web wizard that installs and auto-wires a self-hosted media stack using Docker, following the [TRaSH Guides](https://trash-guides.info/) single-mount convention for hardlinks. The core 4-service stack is always installed; optional add-ons (Jellyfin, Jellyseerr, Bazarr, Notifiarr+Telegram, Recyclarr, Caddy, Flaresolverr) are togglable from the Settings step.
+A 7-step web wizard that installs and auto-wires a self-hosted media stack using Docker, following the [TRaSH Guides](https://trash-guides.info/) single-mount convention for hardlinks. The core 4-service stack is always installed; optional add-ons (Jellyfin, **Overseerr**, Jellyseerr, Bazarr, **MediaHub Web UI**, Notifiarr+Telegram, Recyclarr, Caddy, Flaresolverr, **Syncthing**, **Gluetun VPN**) are togglable from the Settings step. It also runs on **Linux** and supports a [remote-seedbox topology](docs/REMOTE-SEEDBOX.md) — downloads on a VPS, library synced home.
 
 ![status: alpha](https://img.shields.io/badge/status-alpha-orange)
 [![CI](https://github.com/dhouchin1/mediahub-setup/actions/workflows/ci.yml/badge.svg)](https://github.com/dhouchin1/mediahub-setup/actions/workflows/ci.yml)
@@ -16,6 +16,46 @@ A 7-step web wizard that installs and auto-wires a self-hosted media stack using
 
 ---
 
+## Quickstart
+
+Same tool on every machine — pick a role with `--role` (or on the Welcome screen).
+*First time? [Install it](#install) first.*
+
+### All-in-one (one machine)
+
+```bash
+mediahub-setup          # opens the wizard in your browser → click through the 7 steps
+```
+
+### Remote seedbox → home (two machines)
+
+Downloads run on a cheap Linux VPS; only the **organized library** syncs home to a Mac.
+Full walkthrough with troubleshooting: **[docs/REMOTE-SEEDBOX.md](docs/REMOTE-SEEDBOX.md)**.
+
+**1 · On the VPS** *(after installing Docker + Tailscale):*
+
+```bash
+mediahub-setup --role=seedbox --no-browser     # binds localhost; prints a URL + port
+# reach the wizard from your laptop over an SSH tunnel (use the port it printed):
+ssh -L 7842:127.0.0.1:7842 you@your-vps        # then open http://localhost:7842
+```
+
+Step through **Install → Wire-up**, then **copy the VPS's Syncthing device ID** from the Done page.
+
+**2 · On your Mac:**
+
+```bash
+mediahub-setup --role=receiver                 # auto-opens your browser
+```
+
+In **Settings**, paste the **VPS device ID** and keep the same Folder ID. It installs Syncthing **Receive-Only with versioning forced on**, then shows *this* Mac's device ID.
+
+**3 · Pair them** — add each machine's device ID on the other and accept the shared `mediahub-media` folder. The `Media/` library now syncs down automatically; point Jellyfin/Plex at it.
+
+> ⚠️ On the Mac, never switch the folder to *Send & Receive* or disable versioning. Syncthing's "Receive-Only" does **not** stop deletions from propagating — versioning is what keeps a VPS-side cleanup from wiping your library.
+
+---
+
 ## What you get
 
 ### Core stack (always installed)
@@ -25,7 +65,7 @@ A 7-step web wizard that installs and auto-wires a self-hosted media stack using
 | [Sonarr](https://sonarr.tv/) | 8989 | TV series manager — finds, downloads, and organises episodes |
 | [Radarr](https://radarr.video/) | 7878 | Movie manager — same idea, but for films |
 | [Prowlarr](https://github.com/Prowlarr/Prowlarr) | 9696 | Indexer hub — one place to manage all your trackers; Sonarr + Radarr query it automatically |
-| [qBittorrent](https://www.qbittorrent.org/) | 8080 | Torrent client — downloads to `/data/torrents`, Sonarr/Radarr hardlink into `/data/media` |
+| [qBittorrent](https://www.qbittorrent.org/) | 8090 | Torrent client — downloads to `/data/Torrents`, Sonarr/Radarr hardlink into `/data/Media` |
 
 All four services share a **single `/data` mount** on your external drive so hardlinks work, saving you a full second copy of every file.
 
@@ -34,14 +74,42 @@ All four services share a **single `/data` mount** on your external drive so har
 | Service | Port | What it does |
 |---------|------|--------------|
 | [Jellyfin](https://jellyfin.org/) | 8096 | Free media server — actually *play* your library on TVs, phones, browsers |
-| [Jellyseerr](https://github.com/Fallenbagel/jellyseerr) | 5055 | Request UI for non-technical household members; auto-wires to Sonarr/Radarr |
+| [Overseerr](https://overseerr.dev/) | 5055 | **Request UI** for non-technical household members; auto-wires to Sonarr/Radarr |
+| [Jellyseerr](https://github.com/Fallenbagel/jellyseerr) | 5056 | Jellyfin-flavoured fork of Overseerr — pick this instead if you prefer the Jellyfin-tight integration |
 | [Bazarr](https://www.bazarr.media/) | 6767 | Subtitle downloader — wires to Sonarr + Radarr automatically |
+| **MediaHub Web UI** | 3000 | Custom Next.js dashboard with library, downloads, and requests at a glance (image: `ghcr.io/dhouchin1/mediahub-web:latest`) |
 | [Notifiarr](https://notifiarr.com/) + Telegram | 5454 | Webhook router with a **Telegram bot** to tell you when downloads finish |
 | [Recyclarr](https://recyclarr.dev/) | — | Auto-syncs TRaSH Guides quality profiles into Sonarr/Radarr nightly |
-| [Caddy](https://caddyserver.com/) | 80 / 443 | Reverse proxy with auto-HTTPS; expose everything under one hostname |
+| [Caddy](https://caddyserver.com/) | (varies) | Reverse proxy with two modes: **local** (per-port + IP allowlist, default) or **public** (single hostname + auto-HTTPS) |
 | [Flaresolverr](https://github.com/FlareSolverr/FlareSolverr) | 8191 | Cloudflare bypass for protected indexers |
+| [Syncthing](https://syncthing.net/) | 8384 | Replicate the organised library between a remote seedbox and home — see [Deployment modes](#deployment-modes) |
+| [Gluetun](https://github.com/qdm12/gluetun) | — | Route qBittorrent through a VPN (WireGuard/OpenVPN) with port-forwarding for seeding |
 
-Selecting Jellyseerr automatically enables Jellyfin (dependency resolution is handled for you).
+Selecting Jellyseerr automatically enables Jellyfin. Overseerr and Jellyseerr share a port range and are mutually exclusive — pick one.
+
+#### Caddy modes
+
+When Caddy is enabled you choose a mode in Settings:
+
+- **Local** *(default)* — Caddy publishes each service on its own port and rejects requests outside the loopback + RFC1918 + `100.64.0.0/10` (Tailscale) ranges. Best for LAN / Tailnet use. No TLS.
+- **Public** — Caddy routes everything under a single hostname (e.g. `mediahub.example.com/sonarr/`) and automatically obtains a Let's Encrypt cert on first request. Best when you want one external URL with HTTPS. Requires ports 80/443 reachable from the internet.
+
+---
+
+## Deployment modes
+
+The wizard supports three topologies, chosen on the Welcome screen or with
+`mediahub-setup --role=<mode>`:
+
+| Mode | What it does |
+|------|--------------|
+| **All-in-one** *(default)* | Download, organise and play everything on one machine — the classic setup. Nothing changes from previous versions. |
+| **Remote seedbox** | Run the acquisition stack (qBittorrent + *arr) on a cheap **Linux VPS**, route torrents through an optional VPN, and Syncthing the organised library home. Web UIs bind to loopback / Tailscale, never the public IP. |
+| **Home receiver** | Run on your Mac to receive the synced library (Syncthing **Receive-Only with versioning forced on**) and play it locally. No *arr stack. |
+
+The seedbox + receiver pair is the "run downloads on a VPS, keep the files at
+home" setup. **Full walkthrough: [docs/REMOTE-SEEDBOX.md](docs/REMOTE-SEEDBOX.md)** —
+including the one Syncthing safety rule you must not break.
 
 ---
 
@@ -112,12 +180,12 @@ After the wizard, your stack runs independently via Docker — you can manage it
 
 ## Requirements
 
-- macOS 13 Ventura or later (Apple Silicon or Intel)
+- **macOS 13 Ventura or later** (Apple Silicon or Intel), **or Linux** (Ubuntu/Debian — for the remote-seedbox VPS)
 - Python 3.12+
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) or [OrbStack](https://orbstack.dev/) running
-- An APFS-formatted external drive (or partition) for media storage
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) / [OrbStack](https://orbstack.dev/) on macOS, or [Docker Engine](https://docs.docker.com/engine/install/) on Linux
+- A data drive or writable folder for media storage (APFS on macOS; any writable mount/folder on Linux — the drive step has a manual-path option for headless servers)
 
-NTFS drives are automatically detected and flagged as unsafe for hardlinks during the drive step.
+NTFS drives are automatically detected and flagged as unsafe for hardlinks during the drive step (on macOS, where NTFS is read-only).
 
 ---
 
@@ -136,7 +204,8 @@ If you close the wizard halfway or a wiring task fails, visit `/repair` — it i
 
 ## What's coming next
 
-- [ ] **Linux support** (Ubuntu/Debian) — only `drives.py` is macOS-specific right now
+- [x] **Linux support** (Ubuntu/Debian) — done; powers the remote-seedbox role
+- [x] **Remote seedbox + Syncthing** — run downloads on a VPS, sync the library home
 - [ ] **Backup/restore wizard** — tarball `~/mediahub/config/` and restore on a new machine
 - [ ] **Windows/WSL2 support**
 - [ ] **xterm.js terminal widget** for the install log stream

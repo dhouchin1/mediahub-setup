@@ -49,6 +49,7 @@
           </button>
           <div x-show="open" x-transition
                class="mb-3 text-sm text-slate-300 bg-slate-900/60 rounded-lg p-3 border border-slate-700/50 leading-relaxed">
+            {% if is_macos %}
             macOS doesn&rsquo;t write to NTFS natively.
             <strong class="text-slate-100">Easiest fix:</strong> buy
             <a href="https://www.paragon-software.com/home/ntfs-mac/" target="_blank" rel="noopener"
@@ -56,6 +57,12 @@
             Or reformat the drive to APFS in
             <strong class="text-slate-100">Disk Utility</strong>
             (this erases all data on the drive).
+            {% else %}
+            This filesystem is mounted read-only. Remount it writable
+            (e.g. <code class="text-slate-100">sudo mount -o remount,rw {{ d.mount_path }}</code>),
+            fix its <code class="text-slate-100">/etc/fstab</code> options, or pick a
+            different disk. You can also type a writable folder path below.
+            {% endif %}
           </div>
           {% endif %}
 
@@ -94,7 +101,8 @@
               d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0M13 17H9m8 0h2M3 17h2M9 11h6m-6-4h6m-6 8h6"/>
       </svg>
     </div>
-    <p class="text-slate-300 font-medium mb-1">No external drives found</p>
+    <p class="text-slate-300 font-medium mb-1">No data drives found</p>
+    {% if is_macos %}
     <p class="text-slate-400 text-sm mb-5">
       Plug in an external drive, then click Refresh. If your drive isn't
       appearing, it may be unmounted &mdash; open Disk Utility to mount it.
@@ -110,6 +118,13 @@
         </svg>
       </button>
     </form>
+    {% else %}
+    <p class="text-slate-400 text-sm">
+      Attach &amp; mount a data disk (e.g. a block-storage volume at
+      <code>/mnt/data</code>), then click Refresh &mdash; or just type a
+      writable folder path below to use the root disk.
+    </p>
+    {% endif %}
   </div>
   {% endif %}
 </div>

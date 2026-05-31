@@ -60,3 +60,62 @@ def test_render_recyclarr_config_returns_path_to_written_file(tmp_path):
     )
     assert isinstance(result, Path)
     assert result.suffix == ".yml"
+
+
+def test_render_recyclarr_config_uses_default_profiles_when_unspecified(tmp_path):
+    """When no profiles are passed, the safe defaults (web-1080p + hd-bluray-web) appear."""
+    path = render_recyclarr_config(
+        sonarr_internal_url="http://sonarr:8989",
+        sonarr_api_key="k1",
+        radarr_internal_url="http://radarr:7878",
+        radarr_api_key="k2",
+    )
+    text = path.read_text()
+    assert "sonarr-v4-quality-profile-web-1080p" in text
+    assert "radarr-quality-profile-hd-bluray-web" in text
+
+
+def test_render_recyclarr_config_includes_selected_profile_templates(tmp_path):
+    """Each selected profile contributes both its quality-profile and custom-formats templates."""
+    path = render_recyclarr_config(
+        sonarr_internal_url="http://sonarr:8989",
+        sonarr_api_key="k1",
+        radarr_internal_url="http://radarr:7878",
+        radarr_api_key="k2",
+        selected_profiles={"sonarr": ["anime"], "radarr": ["uhd-bluray-web"]},
+    )
+    text = path.read_text()
+    assert "sonarr-v4-quality-profile-anime" in text
+    assert "sonarr-v4-custom-formats-anime" in text
+    assert "radarr-quality-profile-uhd-bluray-web" in text
+    assert "radarr-custom-formats-uhd-bluray-web" in text
+    # Unselected defaults should NOT leak in
+    assert "sonarr-v4-quality-profile-web-1080p" not in text
+    assert "radarr-quality-profile-hd-bluray-web" not in text
+
+
+def test_render_recyclarr_config_ignores_unknown_profile_keys(tmp_path):
+    """Unknown keys silently drop instead of crashing the wiring step."""
+    path = render_recyclarr_config(
+        sonarr_internal_url="http://sonarr:8989",
+        sonarr_api_key="k1",
+        radarr_internal_url="http://radarr:7878",
+        radarr_api_key="k2",
+        selected_profiles={"sonarr": ["does-not-exist", "anime"], "radarr": []},
+    )
+    text = path.read_text()
+    assert "sonarr-v4-quality-profile-anime" in text
+    assert "does-not-exist" not in text
+
+
+def test_default_recyclarr_profiles_returns_known_keys():
+    """Default selection only references keys that actually exist in the catalog."""
+    from mediahub_setup.recyclarr import (
+        RADARR_PROFILES,
+        SONARR_PROFILES,
+        default_recyclarr_profiles,
+    )
+
+    defaults = default_recyclarr_profiles()
+    assert all(k in SONARR_PROFILES for k in defaults["sonarr"])
+    assert all(k in RADARR_PROFILES for k in defaults["radarr"])

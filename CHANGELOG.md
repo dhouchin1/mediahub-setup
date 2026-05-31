@@ -8,6 +8,71 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — remote seedbox topology
+
+- **Deployment roles** (`mediahub-setup --role=all-in-one|seedbox|receiver`, also
+  a picker on the Welcome screen). `all_in_one` is the default and unchanged.
+  `seedbox` runs the acquisition stack on a remote Linux VPS; `receiver` runs
+  only Syncthing on a home machine to hold the synced library. New
+  `mediahub_setup/roles.py` keeps the logic in one place.
+- **Linux support.** `drives.py` gains an `lsblk`/`/proc/mounts` backend behind
+  a `platform_detect` dispatch (macOS keeps `diskutil`); preflight skips the
+  macOS `/Volumes` file-sharing probe and adapts Docker detection; the drive
+  step has a manual-path entry for headless servers. `mediahub-setup` now runs
+  on Ubuntu/Debian, and CI runs the suite on macOS **and** Linux.
+- **Syncthing** as an optional service — replicates only the organised
+  `Media/` library (never `Torrents/`). The wizard auto-configures the folder
+  **Send-Only** on a seedbox and **Receive-Only with forced Staggered
+  versioning** on a receiver, and surfaces each node's device ID for pairing on
+  the Done page. New `syncthing_client.py` drives the Syncthing REST API.
+- **Gluetun VPN toggle** — optionally routes qBittorrent through a WireGuard/
+  OpenVPN tunnel (`network_mode: service:gluetun`) with port-forwarding for
+  seeding. VPN secrets are written to `.env`, never the compose file. Caddy and
+  the *arr download-client wiring follow qBittorrent to the gluetun netns.
+- **Tailscale-first hardening** — on a seedbox every published web UI binds to
+  `127.0.0.1` (reached over Tailscale or an SSH tunnel), Caddy local mode is
+  pre-checked, and a preflight check nudges installing/connecting Tailscale.
+- **Seedbox retention** — qBittorrent ratio/seed-time share limits with a
+  remove-and-delete action so a small VPS disk auto-prunes; the hardlinked
+  `Media/` library (and the synced home copy) is unaffected.
+- **`docs/REMOTE-SEEDBOX.md`** — end-to-end VPS + Mac walkthrough, including the
+  deletion-propagation safety rule (receiver versioning is non-negotiable).
+
+### Added — sync with media-hub canonical stack
+
+- **Overseerr** as a first-class optional service (`sctx/overseerr:latest`,
+  port 5055). The wizard now defaults to Overseerr instead of Jellyseerr;
+  Jellyseerr remains available for users who prefer the Jellyfin-flavoured
+  fork (it now defaults to port 5056 to avoid the Overseerr conflict).
+- **MediaHub Web UI** as an optional service — the custom Next.js dashboard
+  from the [media-hub repo](https://github.com/dhouchin1/media-hub) that
+  surfaces library status, downloads, and request shortcuts. Ships as
+  `ghcr.io/dhouchin1/mediahub-web:latest`. The installer also supports
+  pointing `web_build_context` at a local checkout for development.
+- **Caddy `local` mode** — per-port site blocks guarded by an IP allowlist
+  (loopback + RFC1918 + `100.64.0.0/10` for Tailscale). This is now the
+  default when Caddy is enabled. Existing `public` (path-routed + auto-HTTPS)
+  mode is still available behind a mode picker on the Settings step.
+- **Unified `RequestAppClient`** in `overseerr_client.py` — Overseerr and
+  Jellyseerr share a REST API, so the wiring step uses one client for both.
+  The old `JellyseerrClient` import alias is preserved for back-compat.
+
+### Changed
+
+- **qBittorrent default port: 8080 → 8090** (8080 collides with too many
+  other local dev servers). Existing installs keep whatever port they wrote
+  to the rendered `docker-compose.yml`; only the wizard's *default* changed.
+- **Jellyfin media mount is now read-only** (`${MEDIA_ROOT}/media:/data/media:ro`)
+  — Jellyfin doesn't need to write to the library and read-only blocks
+  accidents.
+- **`.env` writer** now emits `SONARR_API_KEY`, `RADARR_API_KEY`,
+  `PROWLARR_API_KEY`, `BAZARR_API_KEY`, `QBITTORRENT_USERNAME`, and
+  `QBITTORRENT_PASSWORD` so the custom web service can authenticate to the
+  arr stack. Values are backfilled by the wiring step.
+- **Compose template** drops per-service host port bindings when Caddy is
+  enabled in `local` mode — Caddy alone publishes the host ports, keeping
+  the IP allowlist effective.
+
 ### Added — Phase 1 + 2 expansion (optional services framework)
 
 - **`mediahub_setup/services.py`** — declarative catalog of every service the wizard
