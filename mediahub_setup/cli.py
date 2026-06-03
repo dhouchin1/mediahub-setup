@@ -16,6 +16,7 @@ import click
 from waitress import serve as _waitress_serve
 
 from . import __version__, docker_ops, doctor, headless, roles, state
+from . import backup as backup_mod
 from .app import create_app
 
 
@@ -230,3 +231,51 @@ def down(volumes: bool, assume_yes: bool) -> None:
         raise SystemExit(0)
     click.secho("✘ Teardown failed (see output above).", fg="red")
     raise SystemExit(1)
+
+
+@main.command()
+@click.option(
+    "--output",
+    "-o",
+    "output",
+    type=click.Path(dir_okay=False),
+    default=None,
+    help="Archive path to write (default: ./mediahub-backup-<timestamp>.tar.gz).",
+)
+def backup(output: str | None) -> None:
+    """Back up the deployment's config (configs + compose + .env) to a tarball.
+
+    The media library is NOT included. For the most consistent snapshot of the
+    live databases, stop the stack first with `mediahub-setup down`.
+    """
+    try:
+        path = backup_mod.create_backup(output=output)
+    except FileNotFoundError as exc:
+        click.secho(f"✘ {exc}", fg="red")
+        raise SystemExit(1) from exc
+    size_mb = path.stat().st_size / 1e6
+    click.secho(f"✓ Backup written: {path} ({size_mb:.1f} MB)", fg="green")
+    raise SystemExit(0)
+
+
+@main.command()
+@click.argument("archive", type=click.Path(exists=True, dir_okay=False))
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Overwrite an existing config/ in the install dir.",
+)
+def restore(archive: str, force: bool) -> None:
+    """Restore a deployment config from a backup tarball, then start the stack.
+
+    Restores into ~/mediahub. Bring the stack up afterwards with
+    `mediahub-setup` (or `install`). The stack should be stopped during restore.
+    """
+    try:
+        restored = backup_mod.restore_backup(archive, force=force)
+    except (ValueError, FileExistsError, FileNotFoundError) as exc:
+        click.secho(f"✘ {exc}", fg="red")
+        raise SystemExit(1) from exc
+    click.secho(f"✓ Restored: {', '.join(restored)}", fg="green")
+    click.echo("  Start the stack with `mediahub-setup` (or `mediahub-setup install`).")
+    raise SystemExit(0)

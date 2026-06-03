@@ -180,6 +180,11 @@ mediahub-setup doctor --data-dir /mnt/media # also check the media drive's free 
 # Stop the stack (media library untouched; configs/databases preserved)
 mediahub-setup down
 mediahub-setup down --volumes               # also wipe configs + databases (prompts first)
+
+# Back up / restore the config (configs + compose + .env; media NOT included)
+mediahub-setup backup                       # ./mediahub-backup-<timestamp>.tar.gz
+mediahub-setup backup -o ~/mh.tar.gz        # choose the path
+mediahub-setup restore ~/mh.tar.gz          # restore onto a fresh ~/mediahub, then bring it up
 ```
 
 `doctor` exit codes — `0` healthy, `1` unhealthy (a container is down or disk is
@@ -234,7 +239,7 @@ If you close the wizard halfway or a wiring task fails, visit `/repair` — it i
 
 - [x] **Linux support** (Ubuntu/Debian) — done; powers the remote-seedbox role
 - [x] **Remote seedbox + Syncthing** — run downloads on a VPS, sync the library home
-- [ ] **Backup/restore wizard** — tarball `~/mediahub/config/` and restore on a new machine
+- [x] **Backup/restore** — `mediahub-setup backup` tarballs `~/mediahub/config/` (+ compose + .env); `mediahub-setup restore <archive>` brings it back on a new machine
 - [ ] **Windows/WSL2 support**
 - [ ] **xterm.js terminal widget** for the install log stream
 - [ ] **Plex** as an alternative to Jellyfin

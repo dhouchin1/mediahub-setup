@@ -18,7 +18,7 @@ def test_subcommands_registered():
     runner = CliRunner()
     result = runner.invoke(main, ["--help"])
     assert result.exit_code == 0
-    for cmd in ("serve", "install", "doctor", "down"):
+    for cmd in ("serve", "install", "doctor", "down", "backup", "restore"):
         assert cmd in result.output
 
 

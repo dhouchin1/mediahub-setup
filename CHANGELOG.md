@@ -8,7 +8,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Added — unattended ops (`install --dry-run`, `doctor`, `down`)
+### Added — unattended ops (`install --dry-run`, `doctor`, `down`, `backup`/`restore`)
+
+- **`mediahub-setup backup` / `restore`** — config backup & restore (roadmap
+  item). `backup` tarballs the deployment's `config/` tree plus the rendered
+  `docker-compose.yml` and `.env` (the media library is intentionally **not**
+  included) to a timestamped `.tar.gz`. `restore <archive>` extracts it back
+  into `~/mediahub` — using tarfile's `data` filter and a path-traversal guard
+  so a hostile archive can't escape the target, and refusing to clobber an
+  existing `config/` without `--force`. Move a whole deployment to a new
+  machine, or snapshot before a risky change.
 
 - **`mediahub-setup down`** — stops the stack (`docker compose down`) from the
   CLI. The bind-mounted media library is never touched; named volumes (service
