@@ -8,6 +8,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — fully-automated (headless) install
+
+- **`mediahub-setup install` subcommand** — a non-interactive, config-driven
+  install for unattended bring-up (cloud-init / a fresh VPS). Runs the same
+  pipeline as the web wizard (preflight → drive → settings → `docker compose up
+  -d` → wiring) from a YAML/JSON config plus flags, streams progress, and
+  returns a distinct exit code per phase. Bare `mediahub-setup` still launches
+  the wizard; `mediahub-setup serve` is the explicit alias.
+- **`settings_builder.py`** — builds the exact wizard `settings` contract from a
+  plain config mapping (no Flask form), reused by the headless path. A
+  key-parity test guards against drift from the `/settings` route.
+- **`headless.py`** — the orchestrator; on success prints the service URLs and
+  the seedbox's own Syncthing device ID (reachable over Tailscale on a seedbox).
+- **`scripts/install.sh` now supports Linux** (apt/dnf/yum/pacman with a
+  pip-user fallback, plus an opt-in `MEDIAHUB_INSTALL_DOCKER=1` Docker Engine
+  bootstrap) and **passes extra args through to `mediahub-setup`**, enabling a
+  true one-liner: `curl … | bash -s -- install --role seedbox --config seedbox.yml --yes`.
+- **`examples/seedbox.yml` + `examples/receiver.yml`** — documented config
+  templates; `docs/REMOTE-SEEDBOX.md` now leads with the automated path.
+
 ### Added — remote seedbox topology
 
 - **Deployment roles** (`mediahub-setup --role=all-in-one|seedbox|receiver`, also

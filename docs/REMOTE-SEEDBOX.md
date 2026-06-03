@@ -59,6 +59,34 @@ Either one re-arms deletion propagation and you can lose your library.
 
 ## 1 · Set up the VPS (seedbox)
 
+### Option A — fully automated (recommended)
+
+Write a config file and run one non-interactive command — ideal for cloud-init
+or a fresh VPS. Start from [`examples/seedbox.yml`](../examples/seedbox.yml), set
+`data_dir` and (to push the library straight home) the Mac's
+`syncthing.remote_device_id`, then:
+
+```bash
+# On the VPS — bootstrap mediahub-setup AND run the install in one shot.
+# (Docker is a prerequisite; prepend MEDIAHUB_INSTALL_DOCKER=1 to auto-install it.)
+curl -fsSL https://raw.githubusercontent.com/dhouchin1/mediahub-setup/main/scripts/install.sh \
+  | bash -s -- install --role seedbox --config seedbox.yml --yes
+```
+
+It runs preflight → creates the data layout → `docker compose up -d` → wires
+Prowlarr/Sonarr/Radarr/qBittorrent and Syncthing (Send-Only, pre-paired to the
+Mac when you supplied its device ID), then prints the service URLs and **this
+seedbox's own Syncthing device ID**. It exits non-zero if any phase fails, so a
+provisioning script can branch on the result.
+
+Already have `mediahub-setup` installed? Just:
+
+```bash
+mediahub-setup install --role seedbox --config seedbox.yml
+```
+
+### Option B — interactive wizard
+
 ```bash
 # On the VPS
 curl -fsSL https://raw.githubusercontent.com/dhouchin1/mediahub-setup/main/scripts/install.sh | bash
@@ -90,6 +118,16 @@ Walk the steps:
 ---
 
 ## 2 · Set up the Mac (receiver)
+
+Automated — fill in `data_dir` and the **seedbox's** `remote_device_id` (printed
+at the end of the seedbox install) in [`examples/receiver.yml`](../examples/receiver.yml), then:
+
+```bash
+# On the Mac
+mediahub-setup install --role receiver --config receiver.yml
+```
+
+Or walk it interactively:
 
 ```bash
 # On the Mac

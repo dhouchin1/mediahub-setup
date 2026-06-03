@@ -1,0 +1,21 @@
+# MediaHub Setup — home receiver (the Mac) config.
+#   mediahub-setup install --role receiver --config receiver.yml
+#
+# The receiver runs ONLY Syncthing, in Receive-Only mode with versioning forced
+# ON, so that a delete on the seedbox parks the file in .stversions instead of
+# wiping your home library. Point Jellyfin / Plex at <data_dir>/Media for local
+# playback.
+
+role: receiver
+
+# Where the synced library lands locally (e.g. an external drive). Only the
+# Media/ tree is created. Created automatically if it does not exist.
+data_dir: /Volumes/Media
+
+timezone: America/Detroit
+# puid / pgid default to the current user.
+
+syncthing:
+  folder_label: MediaHub Library
+  folder_id: mediahub-media   # MUST match the seedbox's folder_id
+  remote_device_id: ""        # <-- the SEEDBOX's device ID (printed at the end of the seedbox install)

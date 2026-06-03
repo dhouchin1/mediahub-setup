@@ -1,0 +1,66 @@
+# MediaHub Setup — seedbox (remote VPS) config for a fully-automated install.
+#
+# On the VPS, either bootstrap + install in one line:
+#   curl -fsSL https://raw.githubusercontent.com/dhouchin1/mediahub-setup/main/scripts/install.sh \
+#     | bash -s -- install --role seedbox --config seedbox.yml --yes
+# or, if mediahub-setup is already installed:
+#   mediahub-setup install --role seedbox --config seedbox.yml
+
+role: seedbox
+
+# Where downloads + the organised library live ON THE VPS. A separate block
+# volume (e.g. /mnt/data) is ideal; on a tiny disk a plain folder such as
+# /opt/mediahub-data is fine. Created automatically if it does not exist.
+data_dir: /mnt/data
+
+# Container identity — PUID/PGID own the files on disk. Default to the user
+# running the install if omitted.
+puid: 1000
+pgid: 1000
+timezone: America/Detroit
+
+# qBittorrent + the *arr apps share one password. Leave blank to auto-generate
+# a strong one (printed in the final summary).
+qbittorrent_username: admin
+shared_password: ""
+
+# Optional services on top of the always-on core (prowlarr / sonarr / radarr /
+# qbittorrent). Syncthing is force-added for the seedbox role. Caddy fronts the
+# UIs behind an IP allowlist and is strongly recommended on a public VPS.
+services:
+  - caddy
+  - bazarr
+  # - jellyfin
+  # - gluetun          # route qBittorrent egress through a VPN (see gluetun: below)
+
+caddy:
+  mode: local          # local = IP allowlist (loopback + RFC1918 + Tailscale); public = auto-HTTPS on a domain
+  domain: mediahub.local   # only used when mode is 'public'
+
+# Point the seedbox at your home Mac: put the MAC's Syncthing device ID here so
+# the VPS pre-pairs and pushes the organised library home. Get it by running
+# `mediahub-setup install --role receiver` on the Mac (it prints its device ID
+# at the end), or from the Mac's Syncthing UI (Actions -> Show ID).
+syncthing:
+  folder_label: MediaHub Library
+  folder_id: mediahub-media
+  remote_device_id: ""   # <-- the Mac receiver's Syncthing device ID
+
+# Keep a small VPS disk from filling up: when a torrent passes these limits
+# qBittorrent removes it and deletes its Torrents/ copy. The hardlinked Media/
+# library — and the Syncthing copy on the Mac — survives.
+retention:
+  seed_ratio: 2.0
+  seed_time_minutes: 10080   # 7 days
+  remove_on_limit: true
+
+# Route qBittorrent through a VPN. Only used when 'gluetun' is in services.
+# gluetun:
+#   provider: mullvad
+#   vpn_type: wireguard          # or 'openvpn'
+#   wireguard_private_key: "REDACTED"
+#   wireguard_addresses: "10.64.0.2/32"
+#   server_countries: "USA"
+#   port_forwarding: true
+#   # openvpn_user: "..."
+#   # openvpn_password: "..."
