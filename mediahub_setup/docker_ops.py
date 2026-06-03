@@ -305,3 +305,44 @@ def compose_update_all(install_dir: Path | None = None) -> bool:
     )
     _update_thread.start()
     return True
+
+
+# ---------------------------------------------------------------------------
+# Compose lifecycle: down (teardown)
+# ---------------------------------------------------------------------------
+
+
+def compose_down(
+    install_dir: Path | None = None, *, remove_volumes: bool = False
+) -> tuple[bool, str]:
+    """Run ``docker compose down`` in the install dir. Returns (ok, output).
+
+    Synchronous (teardown is quick, unlike the long pull+recreate update).
+    Without *remove_volumes* the named volumes — service configs and the
+    qBittorrent/\\*arr databases — are preserved, so ``up`` brings the same
+    deployment back. With *remove_volumes* those volumes are deleted too
+    (``down --volumes``); the bind-mounted media library is never touched
+    either way.
+    """
+    install_dir = install_dir or INSTALL_DIR
+    compose_file = Path(install_dir) / "docker-compose.yml"
+    if not compose_file.is_file():
+        return False, f"No docker-compose.yml in {install_dir} — nothing to tear down."
+
+    cmd = ["docker", "compose", "down"]
+    if remove_volumes:
+        cmd.append("--volumes")
+    try:
+        r = subprocess.run(
+            cmd,
+            cwd=str(install_dir),
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except Exception as exc:
+        return False, f"`{' '.join(cmd)}` failed: {exc}"
+    output = (r.stdout + r.stderr).strip()
+    if r.returncode != 0:
+        return False, output or f"`{' '.join(cmd)}` exited with code {r.returncode}"
+    return True, output or "Stack stopped."

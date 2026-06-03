@@ -183,3 +183,41 @@ def test_update_status_initial_is_idle():
     assert "status" in status
     assert "log_lines" in status
     assert isinstance(status["log_lines"], list)
+
+
+# ---------------------------------------------------------------------------
+# compose_down
+# ---------------------------------------------------------------------------
+
+
+def test_compose_down_no_compose_file(tmp_path):
+    """Without a docker-compose.yml there's nothing to tear down."""
+    ok, msg = docker_ops.compose_down(install_dir=tmp_path)
+    assert ok is False
+    assert "nothing to tear down" in msg
+
+
+def test_compose_down_runs_plain_down(tmp_path):
+    (tmp_path / "docker-compose.yml").write_text("services: {}\n")
+    with patch("subprocess.run", return_value=_proc(returncode=0, stdout="Removed")) as run:
+        ok, msg = docker_ops.compose_down(install_dir=tmp_path)
+    assert ok is True
+    cmd = run.call_args.args[0]
+    assert cmd == ["docker", "compose", "down"]
+    assert "--volumes" not in cmd
+
+
+def test_compose_down_with_volumes_passes_flag(tmp_path):
+    (tmp_path / "docker-compose.yml").write_text("services: {}\n")
+    with patch("subprocess.run", return_value=_proc(returncode=0, stdout="")) as run:
+        ok, _ = docker_ops.compose_down(install_dir=tmp_path, remove_volumes=True)
+    assert ok is True
+    assert run.call_args.args[0] == ["docker", "compose", "down", "--volumes"]
+
+
+def test_compose_down_reports_failure(tmp_path):
+    (tmp_path / "docker-compose.yml").write_text("services: {}\n")
+    with patch("subprocess.run", return_value=_proc(returncode=1, stderr="boom")):
+        ok, msg = docker_ops.compose_down(install_dir=tmp_path)
+    assert ok is False
+    assert "boom" in msg

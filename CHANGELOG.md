@@ -8,7 +8,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Added — unattended ops (`install --dry-run`, `doctor`)
+### Added — unattended ops (`install --dry-run`, `doctor`, `down`)
+
+- **`mediahub-setup down`** — stops the stack (`docker compose down`) from the
+  CLI. The bind-mounted media library is never touched; named volumes (service
+  configs + the \*arr/qBittorrent databases) are **preserved** by default so a
+  later `mediahub-setup` brings the same deployment back. `--volumes` wipes them
+  for a clean slate, gated behind a confirmation prompt (`--yes` to skip).
 
 - **`mediahub-setup install --dry-run`** — validates the config and runs
   preflight, resolves the data directory and builds the `settings` contract,

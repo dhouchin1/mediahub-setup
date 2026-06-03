@@ -15,7 +15,7 @@ import webbrowser
 import click
 from waitress import serve as _waitress_serve
 
-from . import __version__, doctor, headless, roles, state
+from . import __version__, docker_ops, doctor, headless, roles, state
 from .app import create_app
 
 
@@ -195,3 +195,38 @@ def doctor_cmd(data_dir: str | None, role: str | None) -> None:
     shows disk headroom — handy for a cron/monitoring check on a remote seedbox.
     """
     raise SystemExit(doctor.run(media_dir=data_dir, role=role))
+
+
+@main.command()
+@click.option(
+    "--volumes",
+    is_flag=True,
+    help="Also delete named volumes (service configs + databases). Destructive.",
+)
+@click.option(
+    "--yes",
+    "-y",
+    "assume_yes",
+    is_flag=True,
+    help="Don't prompt for confirmation (required with --volumes when non-interactive).",
+)
+def down(volumes: bool, assume_yes: bool) -> None:
+    """Stop the stack (docker compose down). Media library is never touched.
+
+    By default the named volumes (configs + *arr/qBittorrent databases) are
+    preserved, so `mediahub-setup` brings the same deployment back. Pass
+    --volumes to wipe them for a clean slate.
+    """
+    if volumes and not assume_yes:
+        click.confirm(
+            "This deletes all service configs and databases (not your media). Continue?",
+            abort=True,
+        )
+    ok, output = docker_ops.compose_down(remove_volumes=volumes)
+    if output:
+        click.echo(output)
+    if ok:
+        click.secho("✓ Stack stopped." + (" Volumes removed." if volumes else ""), fg="green")
+        raise SystemExit(0)
+    click.secho("✘ Teardown failed (see output above).", fg="red")
+    raise SystemExit(1)
