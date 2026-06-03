@@ -160,6 +160,34 @@ mediahub-setup-menubar
 
 ---
 
+## Operating a deployment (CLI)
+
+Beyond the wizard, a few non-interactive subcommands cover unattended bring-up
+and day-2 ops — handy on a headless seedbox where there's no browser:
+
+```bash
+# Validate a config and preview the plan WITHOUT touching Docker (cloud-init pre-check)
+mediahub-setup install --role seedbox --config seedbox.yml --dry-run
+
+# Bring the stack up unattended from that config
+mediahub-setup install --role seedbox --config seedbox.yml --yes
+
+# Health-check a running deployment (read-only); exits non-zero if anything is wrong
+mediahub-setup doctor                       # container states + disk headroom
+mediahub-setup doctor --role seedbox        # + Tailscale connectivity check
+mediahub-setup doctor --data-dir /mnt/media # also check the media drive's free space
+
+# Stop the stack (media library untouched; configs/databases preserved)
+mediahub-setup down
+mediahub-setup down --volumes               # also wipe configs + databases (prompts first)
+```
+
+`doctor` exit codes — `0` healthy, `1` unhealthy (a container is down or disk is
+critically low), `2` Docker unavailable, `3` nothing installed — make it
+dependable in a cron or monitoring job.
+
+---
+
 ## How it works
 
 The wizard walks you through seven steps:

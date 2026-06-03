@@ -85,6 +85,16 @@ Already have `mediahub-setup` installed? Just:
 mediahub-setup install --role seedbox --config seedbox.yml
 ```
 
+> **Tip — dry-run first.** Append `--dry-run` to validate the config and run
+> preflight, then print the resolved plan (services, ports, and the exact
+> wiring tasks) **without** touching Docker. It returns non-zero on a bad
+> config, so a provisioning script can fail fast before committing the VPS to
+> a real install:
+>
+> ```bash
+> mediahub-setup install --role seedbox --config seedbox.yml --dry-run
+> ```
+
 ### Option B — interactive wizard
 
 ```bash
@@ -207,6 +217,12 @@ Enable **Gluetun** in Settings to route qBittorrent's traffic through a VPN:
 
 ## Troubleshooting
 
+- **First, run `doctor`.** On the VPS, `mediahub-setup doctor --role seedbox`
+  is a read-only check that reports each container's state, disk headroom, and
+  Tailscale connectivity — and exits non-zero on trouble, so it drops straight
+  into a cron/monitoring loop. A stopped service shows up here before you
+  notice missing downloads. To bring the stack back down (configs and media
+  preserved), use `mediahub-setup down`.
 - **Devices won't connect.** Both must be online and trust each other's device
   ID. Check the VPS firewall allows Syncthing's `22000/tcp+udp` and
   `21027/udp`. Watch the Syncthing UI's "Remote Devices" panel.
