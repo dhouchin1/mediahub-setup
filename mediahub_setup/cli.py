@@ -133,6 +133,11 @@ def serve(port: int | None, no_browser: bool, role: str | None) -> None:
 @click.option("--skip-preflight", is_flag=True, help="Skip preflight checks entirely.")
 @click.option("--force", is_flag=True, help="Proceed even if preflight reports failures.")
 @click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Validate config + preflight and print the install plan without starting anything.",
+)
+@click.option(
     "--yes",
     "-y",
     "assume_yes",
@@ -145,6 +150,7 @@ def install(
     role: str,
     skip_preflight: bool,
     force: bool,
+    dry_run: bool,
     assume_yes: bool,
 ) -> None:
     """Install the stack non-interactively from a config file (headless).
@@ -152,6 +158,9 @@ def install(
     Example:
 
         mediahub-setup install --role seedbox --config seedbox.yml
+
+    Pass --dry-run to validate the config and preview the plan without
+    touching Docker — handy as a cloud-init pre-check.
     """
     rc = headless.run(
         role=role,
@@ -159,6 +168,7 @@ def install(
         data_dir=data_dir,
         skip_preflight=skip_preflight,
         force=force,
+        dry_run=dry_run,
         assume_yes=assume_yes,
     )
     raise SystemExit(rc)

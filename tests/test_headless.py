@@ -121,6 +121,56 @@ def test_run_missing_data_dir_returns_drive_error(monkeypatch):
     assert rc == headless.EXIT_DRIVE
 
 
+# --- dry run ---------------------------------------------------------------
+
+
+def test_dry_run_validates_without_installing(tmp_path, monkeypatch):
+    """--dry-run builds settings but never touches the installer or wiring."""
+    data_dir = tmp_path / "data"
+    _mock_preflight(monkeypatch)
+
+    def _boom(*a, **k):  # any install/wiring side-effect must NOT be reached
+        raise AssertionError("dry run must not start the install pipeline")
+
+    monkeypatch.setattr(installer, "start_install", _boom)
+    monkeypatch.setattr(installer, "render_compose", _boom)
+    monkeypatch.setattr(wiring_runner, "start_wiring", _boom)
+
+    rc = headless.run(role="seedbox", data_dir=str(data_dir), dry_run=True, poll_interval=0)
+
+    assert rc == headless.EXIT_OK
+    # settings + drive were resolved and stored…
+    assert state.get("settings")["role"] == "seedbox"
+    assert state.get("drive")["mount_path"] == str(data_dir)
+    # …but nothing was installed.
+    assert state.get("install") is None
+
+
+def test_dry_run_still_reports_config_error(tmp_path, monkeypatch):
+    """An invalid config fails the dry run with EXIT_CONFIG, not EXIT_OK."""
+    _mock_preflight(monkeypatch)
+    cfg = tmp_path / "bad.yml"
+    cfg.write_text("services:\n  - gluetun\ngluetun: {}\n")  # gluetun on, no secrets
+
+    rc = headless.run(
+        role="seedbox",
+        config_path=str(cfg),
+        data_dir=str(tmp_path / "data"),
+        dry_run=True,
+        poll_interval=0,
+    )
+    assert rc == headless.EXIT_CONFIG
+
+
+def test_dry_run_aborts_on_preflight_fail(tmp_path, monkeypatch):
+    """Preflight is still enforced under --dry-run (unless --force/--skip)."""
+    _mock_preflight(monkeypatch, overall="fail")
+    rc = headless.run(
+        role="seedbox", data_dir=str(tmp_path / "data"), dry_run=True, poll_interval=0
+    )
+    assert rc == headless.EXIT_PREFLIGHT
+
+
 def test_run_preflight_fail_aborts(tmp_path, monkeypatch):
     _mock_preflight(monkeypatch, overall="fail")
     rc = headless.run(role="seedbox", data_dir=str(tmp_path / "d"), poll_interval=0)

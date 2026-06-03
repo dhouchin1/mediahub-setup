@@ -114,9 +114,7 @@ def _run_install(
     """Render compose/.env, start docker compose, and poll until ready."""
     role = settings["role"]
     install_dir = installer.prepare_install_dir()
-    installer.prepare_media_layout(
-        drive["mount_path"], include_torrents=roles.installs_arr(role)
-    )
+    installer.prepare_media_layout(drive["mount_path"], include_torrents=roles.installs_arr(role))
     compose_path = installer.render_compose(install_dir, settings)
     installer.render_env(install_dir, drive, settings)
     _echo(f"• Wrote {compose_path}")
@@ -188,6 +186,51 @@ def _run_wiring(role: str, settings: dict[str, Any], *, timeout: float, poll: fl
     return False
 
 
+def _print_plan(role: str, drive: dict[str, Any], settings: dict[str, Any]) -> None:
+    """Print the resolved install plan for ``--dry-run`` (nothing is started)."""
+    from . import services as _services
+
+    ports = settings.get("ports") or {}
+    enabled = settings.get("enabled_services") or []
+
+    _echo("")
+    _echo("─" * 60)
+    _echo(f"DRY RUN — plan for a '{role}' install (nothing was started):")
+    _echo("")
+    free_gb = drive.get("free_gb")
+    free_str = f"{free_gb:.1f} GB" if isinstance(free_gb, (int, float)) else "?"
+    _echo(f"  Data directory : {drive['mount_path']} ({drive.get('filesystem', '?')})")
+    _echo(f"  Free space     : {free_str}")
+    _echo("")
+
+    core = ["sonarr", "radarr", "prowlarr", "qbittorrent"] if roles.installs_arr(role) else []
+    optional = [k for k in enabled if k not in {"recyclarr", "gluetun"}]
+    _echo("  Services (with published ports):")
+    for key in dict.fromkeys(core + optional):  # de-dupe, keep order
+        svc = _services.ALL.get(key)
+        if not svc:
+            continue
+        port = ports.get(svc.get("port_key") or "")
+        port_str = f":{port}" if port else " (no published port)"
+        _echo(f"    • {svc.get('name', key):<14}{port_str}")
+    # Infra-only toggles that have no web UI of their own.
+    for key in ("recyclarr", "gluetun"):
+        if key in enabled:
+            _echo(f"    • {key:<14} (background)")
+
+    planned = wiring_runner.planned_task_names(enabled, role)
+    _echo("")
+    if planned:
+        _echo(f"  Wiring tasks that would run ({len(planned)}):")
+        for name in planned:
+            _echo(f"    – {name}")
+    else:
+        _echo("  Wiring tasks that would run: none for this role.")
+    _echo("")
+    _echo("  Config and preflight are valid. Re-run without --dry-run to install.")
+    _echo("─" * 60)
+
+
 def _print_summary(role: str, settings: dict[str, Any]) -> None:
     wiring = state.get("wiring") or {}
     ports = settings.get("ports") or {}
@@ -248,13 +291,21 @@ def run(
     skip_preflight: bool = False,
     force: bool = False,
     assume_yes: bool = False,  # reserved: headless never prompts, kept for CLI symmetry
+    dry_run: bool = False,
     install_timeout: float = 900.0,
     wiring_timeout: float = 1200.0,
     poll_interval: float = 2.0,
 ) -> int:
-    """Run the full unattended install pipeline. Returns a process exit code."""
+    """Run the full unattended install pipeline. Returns a process exit code.
+
+    With ``dry_run=True`` the pipeline stops after validating the config,
+    running preflight, resolving the data directory and building settings: it
+    prints the resolved plan and returns ``EXIT_OK`` without rendering compose,
+    starting containers or wiring. Useful as a cloud-init sanity check.
+    """
     role = roles.normalize(role)
-    _echo(f"MediaHub Setup — headless install (role: {role})")
+    mode = "dry run" if dry_run else "install"
+    _echo(f"MediaHub Setup — headless {mode} (role: {role})")
 
     try:
         cfg = load_config(config_path) if config_path else {}
@@ -293,6 +344,11 @@ def run(
         settings["enabled_services"]
     )
     _echo(f"• Services: {', '.join(summary_services)}")
+
+    # --- dry run: stop here with the validated plan ------------------------
+    if dry_run:
+        _print_plan(role, drive, settings)
+        return EXIT_OK
 
     # --- install -----------------------------------------------------------
     if not _run_install(drive, settings, timeout=install_timeout, poll=poll_interval):
