@@ -8,6 +8,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — unattended ops (`install --dry-run`, `doctor`)
+
+- **`mediahub-setup install --dry-run`** — validates the config and runs
+  preflight, resolves the data directory and builds the `settings` contract,
+  then prints the resolved plan (services + published ports, and the exact
+  wiring tasks that would run) and stops **before** rendering compose, starting
+  containers, or wiring. Returns the same per-phase exit codes on failure, so
+  it doubles as a cloud-init pre-check: catch a bad `seedbox.yml` before
+  committing a fresh VPS to `docker compose up`.
+- **`mediahub-setup doctor`** — read-only post-install health check for a
+  running deployment. Probes the Docker daemon, reports every `mediahub-*`
+  container's state, and shows disk headroom on the install dir (and `--data-dir`
+  if given). For server roles, `--role seedbox` adds a Tailscale connectivity
+  check. Exit codes (0 healthy / 1 unhealthy / 2 no-Docker / 3 not-installed)
+  make it dependable in a cron or monitoring job on a headless seedbox.
+
 ### Added — fully-automated (headless) install
 
 - **`mediahub-setup install` subcommand** — a non-interactive, config-driven

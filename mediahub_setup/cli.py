@@ -15,7 +15,7 @@ import webbrowser
 import click
 from waitress import serve as _waitress_serve
 
-from . import __version__, headless, roles, state
+from . import __version__, doctor, headless, roles, state
 from .app import create_app
 
 
@@ -172,3 +172,26 @@ def install(
         assume_yes=assume_yes,
     )
     raise SystemExit(rc)
+
+
+@main.command("doctor")
+@click.option(
+    "--data-dir",
+    "data_dir",
+    type=click.Path(),
+    default=None,
+    help="Media data directory to check for free space (in addition to the install dir).",
+)
+@click.option(
+    "--role",
+    type=click.Choice(["all-in-one", "seedbox", "receiver"]),
+    default=None,
+    help="Deployment role — enables the Tailscale connectivity check for server roles.",
+)
+def doctor_cmd(data_dir: str | None, role: str | None) -> None:
+    """Health-check a running deployment (read-only); exits non-zero on problems.
+
+    Probes the Docker daemon, reports every mediahub-* container's state, and
+    shows disk headroom — handy for a cron/monitoring check on a remote seedbox.
+    """
+    raise SystemExit(doctor.run(media_dir=data_dir, role=role))
