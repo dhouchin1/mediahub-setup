@@ -189,13 +189,19 @@ def install(
     default=None,
     help="Deployment role — enables the Tailscale connectivity check for server roles.",
 )
-def doctor_cmd(data_dir: str | None, role: str | None) -> None:
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    help="Emit the report as JSON (for a monitoring/cron consumer) instead of text.",
+)
+def doctor_cmd(data_dir: str | None, role: str | None, as_json: bool) -> None:
     """Health-check a running deployment (read-only); exits non-zero on problems.
 
     Probes the Docker daemon, reports every mediahub-* container's state, and
     shows disk headroom — handy for a cron/monitoring check on a remote seedbox.
     """
-    raise SystemExit(doctor.run(media_dir=data_dir, role=role))
+    raise SystemExit(doctor.run(media_dir=data_dir, role=role, as_json=as_json))
 
 
 @main.command()

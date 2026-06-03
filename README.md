@@ -176,6 +176,7 @@ mediahub-setup install --role seedbox --config seedbox.yml --yes
 mediahub-setup doctor                       # container states + disk headroom
 mediahub-setup doctor --role seedbox        # + Tailscale connectivity check
 mediahub-setup doctor --data-dir /mnt/media # also check the media drive's free space
+mediahub-setup doctor --json                # machine-readable report for monitoring
 
 # Stop the stack (media library untouched; configs/databases preserved)
 mediahub-setup down

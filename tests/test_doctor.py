@@ -115,6 +115,32 @@ def test_seedbox_without_tailscale_warns(monkeypatch):
     assert report["status"] == "unhealthy"  # warn rolls up to unhealthy exit
 
 
+def test_json_output_is_valid_and_keeps_exit_code(monkeypatch, capsys):
+    import json
+
+    _mock_containers(
+        monkeypatch,
+        [{"name": "mediahub-radarr", "state": "exited", "status": "Exited (1)", "ports": ""}],
+    )
+    _mock_no_disks(monkeypatch)
+    rc = doctor.run(as_json=True)
+    out = capsys.readouterr().out
+    parsed = json.loads(out)
+    assert parsed["status"] == "unhealthy"
+    assert parsed["containers"][0]["name"] == "mediahub-radarr"
+    assert rc == doctor.EXIT_UNHEALTHY
+
+
+def test_json_output_no_docker_exit_code(monkeypatch, capsys):
+    import json
+
+    _mock_containers(monkeypatch, [], available=False)
+    rc = doctor.run(as_json=True)
+    parsed = json.loads(capsys.readouterr().out)
+    assert parsed["status"] == "no_docker"
+    assert rc == doctor.EXIT_NO_DOCKER
+
+
 def test_seedbox_with_tailscale_is_healthy(monkeypatch):
     _mock_containers(
         monkeypatch,

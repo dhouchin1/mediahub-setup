@@ -125,9 +125,34 @@ def diagnose(media_dir: str | Path | None = None, role: str | None = None) -> di
     return report
 
 
-def run(media_dir: str | Path | None = None, role: str | None = None) -> int:
-    """Print a health report and return a process exit code."""
+_EXIT_FOR_STATUS = {
+    "ok": EXIT_OK,
+    "unhealthy": EXIT_UNHEALTHY,
+    "no_docker": EXIT_NO_DOCKER,
+    "not_installed": EXIT_NOT_INSTALLED,
+}
+
+
+def run(
+    media_dir: str | Path | None = None,
+    role: str | None = None,
+    *,
+    as_json: bool = False,
+) -> int:
+    """Print a health report and return a process exit code.
+
+    With ``as_json=True`` the structured report is dumped as a single JSON
+    object (for a monitoring/cron consumer) instead of the human view; the
+    exit code is identical either way.
+    """
     report = diagnose(media_dir=media_dir, role=role)
+
+    if as_json:
+        import json
+
+        _echo(json.dumps(report, indent=2))
+        return _EXIT_FOR_STATUS[report["status"]]
+
     _echo("MediaHub Setup — doctor")
 
     if report["status"] == "no_docker":

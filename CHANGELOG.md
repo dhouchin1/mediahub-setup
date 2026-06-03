@@ -38,6 +38,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   if given). For server roles, `--role seedbox` adds a Tailscale connectivity
   check. Exit codes (0 healthy / 1 unhealthy / 2 no-Docker / 3 not-installed)
   make it dependable in a cron or monitoring job on a headless seedbox.
+  `--json` emits the full report as a single JSON object (same exit code) for a
+  monitoring consumer.
 
 ### Added — fully-automated (headless) install
 
