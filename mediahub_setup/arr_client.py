@@ -111,8 +111,11 @@ class QBittorrentClient:
         """Change the Web UI password via setPreferences."""
         resp = self._session.post(
             f"{self.base_url}/api/v2/app/setPreferences",
+            # Serialize with json.dumps (like set_listen_port/set_global_share_limits)
+            # so a password containing a quote or backslash is escaped correctly
+            # instead of producing malformed JSON or injecting other preferences.
             data={
-                "json": (f'{{"web_ui_username":"{username}","web_ui_password":"{new_password}"}}')
+                "json": json.dumps({"web_ui_username": username, "web_ui_password": new_password})
             },
             timeout=15,
         )

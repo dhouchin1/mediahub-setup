@@ -30,6 +30,10 @@ def _load() -> None:
 def _save() -> None:
     try:
         _STATE_PATH.write_text(json.dumps(_state, indent=2))
+        # Wizard state carries the shared password and *arr API keys; this file
+        # lives in the user's home and is never mounted, so restrict it to the
+        # owner rather than the world-readable default.
+        _STATE_PATH.chmod(0o600)
     except OSError:
         pass  # non-fatal — state will just not persist across runs
 

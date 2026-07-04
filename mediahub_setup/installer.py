@@ -168,6 +168,11 @@ def render_env(install_dir: Path, drive: dict, settings: dict) -> Path:
     out = install_dir / ".env"
     install_dir.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines) + "\n")
+    # Holds the shared password, *arr API keys and (for gluetun) the WireGuard
+    # private key / OpenVPN password. Read only by the docker compose CLI on the
+    # host — never bind-mounted — so owner-only perms are safe and keep secrets
+    # off a shared/multi-tenant VPS's world-readable default (0644).
+    out.chmod(0o600)
     return out
 
 
