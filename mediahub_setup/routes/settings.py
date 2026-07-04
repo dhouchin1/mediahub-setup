@@ -292,7 +292,14 @@ def submit():
             "pgid": int(form_data["pgid"]),
             "ports": final_ports,
             "auto_passwords": auto_passwords,
-            "shared_password": form_data["shared_password"] if auto_passwords else None,
+            # form_data["shared_password"] already holds the effective password —
+            # the user's typed value, or a generated one when they left it blank
+            # (see form_data assembly above). Storing None when auto_passwords is
+            # off silently discarded a manually-entered password: downstream
+            # consumers do settings.get("shared_password", ""), but because the
+            # key was present-and-None the "" default never applied, so qBittorrent
+            # ended up with the literal password "None". Always persist the value.
+            "shared_password": form_data["shared_password"],
             "qbittorrent_username": form_data["qbittorrent_username"],
             "enabled_services": enabled,
             "recyclarr_profiles": recyclarr_profiles,
