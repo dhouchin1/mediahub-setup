@@ -21,6 +21,7 @@ manually later.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -38,6 +39,17 @@ NOTIFIARR_CONTAINER = "mediahub-notifiarr"
 # ---------------------------------------------------------------------------
 
 
+def _toml_str(value: str) -> str:
+    """Serialize *value* as a TOML basic (double-quoted) string.
+
+    TOML basic strings use JSON-compatible escapes, so json.dumps is a valid
+    encoder. Single-quoted TOML literals have no escape mechanism at all — a
+    quote in a user-supplied username/password would truncate the string and
+    make the whole notifiarr.conf unparseable.
+    """
+    return json.dumps(value)
+
+
 def render_notifiarr_config(
     *,
     ports: dict,
@@ -46,8 +58,14 @@ def render_notifiarr_config(
     telegram_bot_token: str = "",
     telegram_chat_id: str = "",
     qbittorrent_username: str = "admin",
+    qbittorrent_host: str = "qbittorrent",
 ) -> str:
-    """Build the notifiarr.conf TOML string."""
+    """Build the notifiarr.conf TOML string.
+
+    ``qbittorrent_host`` must be ``"gluetun"`` when qBittorrent egresses
+    through the VPN — it then shares gluetun's network namespace and has no
+    DNS name of its own on the compose network.
+    """
     sonarr_key = api_keys.get("sonarr", "")
     radarr_key = api_keys.get("radarr", "")
     qb_port = ports.get("qbittorrent_web", 8080)
@@ -57,7 +75,7 @@ def render_notifiarr_config(
         "# https://notifiarr.wiki",
         "",
         "bind_addr = '0.0.0.0:5454'",
-        f"ui_password = '{qbittorrent_username}:{shared_password}'",
+        f"ui_password = {_toml_str(f'{qbittorrent_username}:{shared_password}')}",
         "log_file = '/config/notifiarr.log'",
         "log_files = 10",
         "log_file_mb = 100",
@@ -93,9 +111,9 @@ def render_notifiarr_config(
     lines += [
         "[[apps.qbit]]",
         "name = 'qBittorrent'",
-        f"url = 'http://qbittorrent:{qb_port}'",
-        f"user = '{qbittorrent_username}'",
-        f"pass = '{shared_password}'",
+        f"url = 'http://{qbittorrent_host}:{qb_port}'",
+        f"user = {_toml_str(qbittorrent_username)}",
+        f"pass = {_toml_str(shared_password)}",
         "interval = '5m'",
         "timeout = '1m'",
         "",
@@ -139,6 +157,7 @@ def configure_notifiarr_telegram(
     telegram_bot_token: str = "",
     telegram_chat_id: str = "",
     qbittorrent_username: str = "admin",
+    qbittorrent_host: str = "qbittorrent",
 ) -> Path:
     """Write notifiarr.conf and restart the container so it picks it up."""
     NOTIFIARR_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -151,6 +170,7 @@ def configure_notifiarr_telegram(
             telegram_bot_token=telegram_bot_token,
             telegram_chat_id=telegram_chat_id,
             qbittorrent_username=qbittorrent_username,
+            qbittorrent_host=qbittorrent_host,
         )
     )
     # Best-effort restart so the new config is picked up. Non-fatal if it

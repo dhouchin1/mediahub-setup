@@ -80,18 +80,28 @@ _ALWAYS_ON = {"sonarr", "radarr", "prowlarr", "qbittorrent"}
 
 
 def _active_routes(
-    enabled: list[str], qbittorrent_host: str = "qbittorrent"
+    enabled: list[str],
+    ports: dict[str, int],
+    qbittorrent_host: str = "qbittorrent",
 ) -> list[tuple[str, str, str, int]]:
     """Filter DEFAULT_ROUTES to services that are core or in *enabled*.
 
     When qBittorrent egresses through Gluetun it is reachable as the gluetun
-    container, so its reverse-proxy upstream host is overridden.
+    container, so its reverse-proxy upstream host is overridden. qBittorrent
+    is also the one service whose *internal* port is user-driven (compose sets
+    WEBUI_PORT from ``ports``), so its upstream port comes from the runtime
+    ports dict rather than the fixed-image defaults in ``_INTERNAL_PORT``.
     """
     out: list[tuple[str, str, str, int]] = []
     for key, path, host, _ in DEFAULT_ROUTES:
         if key in _ALWAYS_ON or key in enabled:
             upstream = qbittorrent_host if key == "qbittorrent" else host
-            out.append((key, path, upstream, _INTERNAL_PORT[key]))
+            internal = (
+                ports.get("qbittorrent_web", _INTERNAL_PORT[key])
+                if key == "qbittorrent"
+                else _INTERNAL_PORT[key]
+            )
+            out.append((key, path, upstream, internal))
     return out
 
 
@@ -115,7 +125,7 @@ def _render_local(
         "",
     ]
 
-    for key, _path, host, internal_port in _active_routes(enabled, qbittorrent_host):
+    for key, _path, host, internal_port in _active_routes(enabled, ports, qbittorrent_host):
         port_key = _PORT_KEY[key]
         host_port = ports.get(port_key, internal_port)
         lines.append(f":{host_port} {{")
@@ -148,7 +158,7 @@ def _render_public(
         "",
         f"{site_address} {{",
     ]
-    for key, path, host, internal_port in _active_routes(enabled, qbittorrent_host):
+    for key, path, host, internal_port in _active_routes(enabled, ports, qbittorrent_host):
         if key == "web":
             # Web is the landing page in public mode — handled at /
             continue

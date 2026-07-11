@@ -155,3 +155,16 @@ def test_public_mode_web_handles_root(tmp_path):
     path = render_caddyfile(domain="mediahub.local", enabled=["web"], ports={}, mode="public")
     text = path.read_text()
     assert "reverse_proxy web:3000" in text
+
+
+def test_qbittorrent_upstream_port_follows_webui_port_override(tmp_path):
+    """qBittorrent's container listens on WEBUI_PORT (user-driven), so a port
+    override must change the reverse-proxy upstream, not just the site port."""
+    out = render_caddyfile(
+        enabled=[],
+        ports={"qbittorrent_web": 9090},
+        mode="local",
+    )
+    text = out.read_text()
+    assert "reverse_proxy qbittorrent:9090" in text
+    assert ":8090" not in text

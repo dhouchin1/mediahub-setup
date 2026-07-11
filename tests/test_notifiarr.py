@@ -108,3 +108,33 @@ def test_render_notifiarr_config_uses_qb_port_from_settings():
         shared_password=_PASSWORD,
     )
     assert "9999" in cfg
+
+
+def test_render_notifiarr_config_uses_gluetun_host_when_vpn_enabled():
+    """With qBittorrent behind gluetun it has no DNS name of its own —
+    the qbit app URL must point at the gluetun container."""
+    cfg = render_notifiarr_config(
+        ports=_BASE_PORTS,
+        api_keys=_BASE_KEYS,
+        shared_password=_PASSWORD,
+        qbittorrent_host="gluetun",
+    )
+    assert "url = 'http://gluetun:8080'" in cfg
+    assert "http://qbittorrent:" not in cfg
+
+
+def test_render_notifiarr_config_escapes_quotes_in_credentials():
+    """A quote in a user-supplied password must not truncate the TOML string
+    (single-quoted TOML literals cannot escape anything)."""
+    import tomllib
+
+    cfg = render_notifiarr_config(
+        ports=_BASE_PORTS,
+        api_keys=_BASE_KEYS,
+        shared_password="pa'ss\"word",
+        qbittorrent_username="ad'min",
+    )
+    parsed = tomllib.loads(cfg)
+    assert parsed["ui_password"] == "ad'min:pa'ss\"word"
+    assert parsed["apps"]["qbit"][0]["pass"] == "pa'ss\"word"
+    assert parsed["apps"]["qbit"][0]["user"] == "ad'min"
