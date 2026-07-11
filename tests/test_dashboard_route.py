@@ -69,3 +69,21 @@ def test_dashboard_update_all_kicks_off_update(client):
     with patch("mediahub_setup.docker_ops.compose_update_all", return_value=True):
         r = client.post("/dashboard/update-all")
     assert r.status_code == 200
+
+
+def test_dashboard_logs_returns_400_for_non_numeric_tail(client):
+    """A non-numeric tail must be a clean 400, not an unhandled 500."""
+    r = client.get("/dashboard/logs?name=mediahub-sonarr&tail=abc")
+    assert r.status_code == 400
+
+
+def test_dashboard_logs_clamps_tail_bounds(client):
+    """Negative/huge tail values are clamped before reaching docker logs."""
+    from unittest.mock import patch
+
+    with patch("mediahub_setup.routes.dashboard.docker_ops.container_logs") as logs:
+        logs.return_value = ""
+        client.get("/dashboard/logs?name=mediahub-sonarr&tail=-5")
+        logs.assert_called_with("mediahub-sonarr", tail=1)
+        client.get("/dashboard/logs?name=mediahub-sonarr&tail=999999")
+        logs.assert_called_with("mediahub-sonarr", tail=1000)

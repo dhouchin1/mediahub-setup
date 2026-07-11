@@ -128,7 +128,12 @@ def container_logs():
     name = (request.args.get("name") or "").strip()
     if not name or not name.startswith("mediahub-"):
         return ("Invalid container name", 400)
-    tail = int(request.args.get("tail", "50"))
+    try:
+        tail = int(request.args.get("tail", "50"))
+    except ValueError:
+        return ("Invalid tail value", 400)
+    # Bound it — the value ends up in `docker logs --tail`.
+    tail = max(1, min(tail, 1000))
     return (docker_ops.container_logs(name, tail=tail), 200, {"Content-Type": "text/plain"})
 
 
