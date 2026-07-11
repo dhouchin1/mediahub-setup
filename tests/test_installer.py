@@ -458,3 +458,17 @@ def test_start_install_records_compose_and_env_paths(tmp_path):
     assert status["compose_path"] == str(tmp_path / "docker-compose.yml")
     assert status["env_path"] == str(tmp_path / ".env")
     event.set()
+
+
+def test_render_compose_web_qb_url_uses_gluetun_when_vpn_enabled(tmp_path):
+    """The web dashboard must reach qBittorrent via gluetun when it shares
+    the VPN container's network namespace."""
+    settings = _settings_with_gluetun(enabled_services=["gluetun", "web"])
+    text = installer.render_compose(tmp_path, settings).read_text()
+    assert "QBITTORRENT_URL: http://gluetun:8080" in text
+
+
+def test_render_compose_web_qb_url_uses_qbittorrent_without_vpn(tmp_path):
+    settings = {**SAMPLE_SETTINGS, "enabled_services": ["web"]}
+    text = installer.render_compose(tmp_path, settings).read_text()
+    assert "QBITTORRENT_URL: http://qbittorrent:8080" in text

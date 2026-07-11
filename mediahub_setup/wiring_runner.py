@@ -341,6 +341,7 @@ def _configure_notifiarr(ctx: WiringContext) -> str | None:
         telegram_bot_token=notifiarr_cfg.get("telegram_bot_token", ""),
         telegram_chat_id=notifiarr_cfg.get("telegram_chat_id", ""),
         qbittorrent_username=ctx.settings.get("qbittorrent_username", "admin"),
+        qbittorrent_host=ctx.qb_host,
     )
     return "Config written"
 

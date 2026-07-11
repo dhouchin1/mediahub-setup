@@ -46,8 +46,14 @@ def render_notifiarr_config(
     telegram_bot_token: str = "",
     telegram_chat_id: str = "",
     qbittorrent_username: str = "admin",
+    qbittorrent_host: str = "qbittorrent",
 ) -> str:
-    """Build the notifiarr.conf TOML string."""
+    """Build the notifiarr.conf TOML string.
+
+    ``qbittorrent_host`` must be ``"gluetun"`` when qBittorrent egresses
+    through the VPN — it then shares gluetun's network namespace and has no
+    DNS name of its own on the compose network.
+    """
     sonarr_key = api_keys.get("sonarr", "")
     radarr_key = api_keys.get("radarr", "")
     qb_port = ports.get("qbittorrent_web", 8080)
@@ -93,7 +99,7 @@ def render_notifiarr_config(
     lines += [
         "[[apps.qbit]]",
         "name = 'qBittorrent'",
-        f"url = 'http://qbittorrent:{qb_port}'",
+        f"url = 'http://{qbittorrent_host}:{qb_port}'",
         f"user = '{qbittorrent_username}'",
         f"pass = '{shared_password}'",
         "interval = '5m'",
@@ -139,6 +145,7 @@ def configure_notifiarr_telegram(
     telegram_bot_token: str = "",
     telegram_chat_id: str = "",
     qbittorrent_username: str = "admin",
+    qbittorrent_host: str = "qbittorrent",
 ) -> Path:
     """Write notifiarr.conf and restart the container so it picks it up."""
     NOTIFIARR_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -151,6 +158,7 @@ def configure_notifiarr_telegram(
             telegram_bot_token=telegram_bot_token,
             telegram_chat_id=telegram_chat_id,
             qbittorrent_username=qbittorrent_username,
+            qbittorrent_host=qbittorrent_host,
         )
     )
     # Best-effort restart so the new config is picked up. Non-fatal if it
