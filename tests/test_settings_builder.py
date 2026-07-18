@@ -117,6 +117,21 @@ def test_gluetun_openvpn_requires_user_and_password():
         )
 
 
+def test_validate_accepts_root_uid_zero():
+    # cloud-init / one-line VPS installs run as root: PUID/PGID 0 must pass.
+    s = build_settings("seedbox", {})
+    s["puid"] = 0
+    s["pgid"] = 0
+    assert validate_settings(s) == {}
+
+
+def test_validate_rejects_negative_puid():
+    s = build_settings("seedbox", {})
+    s["puid"] = -1
+    errs = validate_settings(s)
+    assert "puid" in errs
+
+
 def test_validate_rejects_out_of_range_port():
     s = build_settings("seedbox", {})
     s["ports"]["sonarr"] = 99999

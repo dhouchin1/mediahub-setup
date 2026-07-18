@@ -101,10 +101,12 @@ def _validate(form: dict) -> dict[str, str]:
         raw = form.get(field, "")
         try:
             val = int(raw)
-            if val <= 0:
-                errors[field] = "Must be a positive integer."
+            # 0 (root) is valid: headless/root installs use PUID=0, which
+            # the linuxserver.io images accept.
+            if val < 0:
+                errors[field] = "Must be a non-negative integer."
         except (TypeError, ValueError):
-            errors[field] = "Must be a positive integer."
+            errors[field] = "Must be a non-negative integer."
 
     for svc in DEFAULT_PORTS:
         key = f"port_{svc}"

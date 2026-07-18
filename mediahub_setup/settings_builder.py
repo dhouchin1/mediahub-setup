@@ -189,10 +189,12 @@ def validate_settings(settings: dict[str, Any]) -> dict[str, str]:
 
     for field in ("puid", "pgid"):
         try:
-            if int(settings.get(field)) <= 0:
-                errors[field] = "Must be a positive integer."
+            # 0 (root) is valid: cloud-init / one-line VPS installs run as
+            # root, and PUID=0 is accepted by the linuxserver.io images.
+            if int(settings.get(field)) < 0:
+                errors[field] = "Must be a non-negative integer."
         except (TypeError, ValueError):
-            errors[field] = "Must be a positive integer."
+            errors[field] = "Must be a non-negative integer."
 
     for key, port in (settings.get("ports") or {}).items():
         try:
