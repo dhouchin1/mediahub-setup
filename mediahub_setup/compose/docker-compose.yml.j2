@@ -242,8 +242,10 @@ services:
     environment:
       LOG_LEVEL: info
       TZ: {{ tz }}
+{% if 'caddy' not in enabled_services or caddy_mode == 'public' %}
     ports:
       - "{{ lb }}{{ ports.flaresolverr }}:8191"
+{% endif %}
     restart: unless-stopped
 {% endif %}
 
@@ -256,8 +258,10 @@ services:
     volumes:
       - ./config/notifiarr:/config
       - /var/run/docker.sock:/var/run/docker.sock:ro
+{% if 'caddy' not in enabled_services or caddy_mode == 'public' %}
     ports:
       - "{{ lb }}{{ ports.notifiarr }}:5454"
+{% endif %}
     restart: unless-stopped
 {% endif %}
 
@@ -331,6 +335,12 @@ services:
 {% endif %}
 {% if 'syncthing' in enabled_services %}
       - "{{ ports.syncthing }}:{{ ports.syncthing }}"
+{% endif %}
+{% if 'notifiarr' in enabled_services %}
+      - "{{ ports.notifiarr }}:{{ ports.notifiarr }}"
+{% endif %}
+{% if 'flaresolverr' in enabled_services %}
+      - "{{ ports.flaresolverr }}:{{ ports.flaresolverr }}"
 {% endif %}
 {% else %}
       - "{{ ports.caddy }}:80"

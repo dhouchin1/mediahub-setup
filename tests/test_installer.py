@@ -15,6 +15,7 @@ import threading
 from unittest.mock import patch
 
 import pytest
+import yaml
 
 from mediahub_setup import installer
 
@@ -108,6 +109,36 @@ def test_render_compose_custom_ports(tmp_path):
     settings["ports"]["sonarr"] = 19000
     out = installer.render_compose(tmp_path, settings)
     assert "19000:8989" in out.read_text()
+
+
+def test_render_compose_caddy_local_hides_notifiarr_flaresolverr_ports(tmp_path):
+    """With Caddy in local mode, notifiarr/flaresolverr must not publish host
+    ports directly (Caddy fronts them via its IP allowlist), and Caddy itself
+    must publish their ports so the allowlisted routes are reachable."""
+    settings = {
+        **SAMPLE_SETTINGS,
+        "enabled_services": ["caddy", "notifiarr", "flaresolverr"],
+        "caddy_mode": "local",
+        "ports": {**SAMPLE_SETTINGS["ports"], "notifiarr": 5454, "flaresolverr": 8191},
+    }
+    doc = yaml.safe_load(installer.render_compose(tmp_path, settings).read_text())
+    assert "ports" not in doc["services"]["notifiarr"]
+    assert "ports" not in doc["services"]["flaresolverr"]
+    caddy_ports = doc["services"]["caddy"]["ports"]
+    assert "5454:5454" in caddy_ports
+    assert "8191:8191" in caddy_ports
+
+
+def test_render_compose_no_caddy_publishes_notifiarr_flaresolverr(tmp_path):
+    """Without Caddy the services keep publishing their own host ports."""
+    settings = {
+        **SAMPLE_SETTINGS,
+        "enabled_services": ["notifiarr", "flaresolverr"],
+        "ports": {**SAMPLE_SETTINGS["ports"], "notifiarr": 5454, "flaresolverr": 8191},
+    }
+    doc = yaml.safe_load(installer.render_compose(tmp_path, settings).read_text())
+    assert "5454:5454" in doc["services"]["notifiarr"]["ports"]
+    assert "8191:8191" in doc["services"]["flaresolverr"]["ports"]
 
 
 def test_render_compose_creates_parent_dir(tmp_path):
