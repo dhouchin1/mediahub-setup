@@ -47,6 +47,7 @@ def test_local_mode_emits_ip_allowlist_snippet(tmp_path):
     assert "100.64.0.0/10" in text  # Tailscale CGNAT range
     assert "192.168.0.0/16" in text  # RFC1918
     assert "10.0.0.0/8" in text
+    assert "172.16.0.0/12" in text  # RFC1918 — 172.16–172.31 LANs, Docker bridges
 
 
 def test_local_mode_includes_web_when_enabled(tmp_path):
