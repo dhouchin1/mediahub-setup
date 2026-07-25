@@ -95,11 +95,11 @@
           <div class="text-xs text-slate-500 mb-1">Password</div>
           <div class="flex items-center gap-2">
             <div class="text-sm font-mono text-slate-200 flex-1 min-w-0 truncate"
-                 x-text="revealed ? '{{ svc.password }}' : '••••••••••••'"></div>
+                 x-text="revealed ? {{ svc.password | tojson }} : '••••••••••••'"></div>
             <button @click="revealed = !revealed"
                     class="text-xs text-slate-400 hover:text-slate-200 transition flex-shrink-0"
                     x-text="revealed ? 'Hide' : 'Reveal'"></button>
-            <button @click="navigator.clipboard.writeText('{{ svc.password }}').then(() => { copied = true; setTimeout(() => copied = false, 1500) })"
+            <button @click="navigator.clipboard.writeText({{ svc.password | tojson }}).then(() => { copied = true; setTimeout(() => copied = false, 1500) })"
                     class="text-xs text-slate-400 hover:text-slate-200 transition flex-shrink-0"
                     x-text="copied ? 'Copied!' : 'Copy'"></button>
           </div>
@@ -111,7 +111,7 @@
         <div>
           <div class="text-xs text-slate-500 mb-1">API key</div>
           <div class="text-xs font-mono text-slate-400 truncate" x-data="{ keyRevealed: false }">
-            <span x-text="keyRevealed ? '{{ svc.api_key }}' : '{{ svc.api_key[:4] }}••••••••••••••••••••••••••••••••'"></span>
+            <span x-text="keyRevealed ? {{ svc.api_key | tojson }} : {{ (svc.api_key[:4] ~ '••••••••••••••••••••••••••••••••') | tojson }}"></span>
             <button @click="keyRevealed = !keyRevealed"
                     class="ml-2 text-slate-500 hover:text-slate-300 transition"
                     x-text="keyRevealed ? 'hide' : 'show'"></button>
@@ -246,7 +246,7 @@
     </p>
     <div class="flex items-center gap-2 mb-3" x-data="{ copied: false }">
       <code class="text-[11px] sm:text-xs font-mono bg-slate-800 px-2 py-1 rounded text-teal-200 break-all flex-1">{{ syncthing.device_id }}</code>
-      <button @click="navigator.clipboard.writeText('{{ syncthing.device_id }}').then(()=>{copied=true;setTimeout(()=>copied=false,1500)})"
+      <button @click="navigator.clipboard.writeText({{ syncthing.device_id | tojson }}).then(()=>{copied=true;setTimeout(()=>copied=false,1500)})"
               class="text-xs text-slate-400 hover:text-slate-200 transition flex-shrink-0" x-text="copied ? 'Copied!' : 'Copy'"></button>
     </div>
     {% else %}

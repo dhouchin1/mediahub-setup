@@ -282,3 +282,38 @@ def test_reset_clears_all_state(client):
     assert r.status_code == 303
     assert state.get("drive") is None
     assert state.get("settings") is None
+
+
+def test_done_escapes_hostile_password_in_alpine_attrs(client):
+    """A password containing quotes/backslashes must be JSON-escaped inside
+    Alpine x-text/@click attributes — Jinja's HTML autoescape alone is NOT
+    enough there, because the browser decodes entities before Alpine
+    evaluates the attribute as JavaScript."""
+    hostile = "pw'); alert(1); ('"
+    state.update(
+        settings={
+            "ports": {
+                "sonarr": 8989,
+                "radarr": 7878,
+                "prowlarr": 9696,
+                "qbittorrent_web": 8080,
+                "qbittorrent_bt": 6881,
+            },
+            "shared_password": hostile,
+        },
+        drive={"name": "X", "mount_path": "/Volumes/MediaHub"},
+        install={"compose_path": "/x/docker-compose.yml"},
+        wiring={
+            "status": "complete",
+            "api_keys": {"sonarr": "k'1"},
+            "qb_credentials": {"username": "admin", "password": hostile},
+        },
+    )
+    r = client.get("/done/")
+    assert r.status_code == 200
+    body = r.data.decode()
+    # tojson unicode-escapes the quote, so the entity-encoded form (which
+    # the browser would decode back into a live quote) must be gone…
+    assert "pw&#39;)" not in body
+    # …and the safe ' form must be what's actually rendered.
+    assert "pw\\u0027)" in body
