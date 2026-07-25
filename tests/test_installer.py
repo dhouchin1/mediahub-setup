@@ -458,3 +458,71 @@ def test_start_install_records_compose_and_env_paths(tmp_path):
     assert status["compose_path"] == str(tmp_path / "docker-compose.yml")
     assert status["env_path"] == str(tmp_path / ".env")
     event.set()
+
+
+# ---------------------------------------------------------------------------
+# _poll_service / _run_install health semantics
+# ---------------------------------------------------------------------------
+
+
+class _FakeResponse:
+    def __init__(self, status_code):
+        self.status_code = status_code
+
+
+def test_poll_service_treats_5xx_as_not_ready():
+    """A service answering 500s is up-but-broken — must not be marked ready."""
+    with patch.object(installer.requests, "get", return_value=_FakeResponse(502)):
+        installer._poll_service("sonarr", "http://localhost:8989", timeout_secs=0.1)
+    assert installer._install_state["services"]["sonarr"] == "timeout"
+
+
+def test_poll_service_treats_4xx_as_ready():
+    """An auth challenge (401) still proves the service is answering."""
+    with patch.object(installer.requests, "get", return_value=_FakeResponse(401)):
+        installer._poll_service("sonarr", "http://localhost:8989", timeout_secs=5)
+    assert installer._install_state["services"]["sonarr"] == "ready"
+
+
+class _FakeProc:
+    returncode = 0
+
+    def __init__(self):
+        import io
+
+        self.stdout = io.StringIO("done\n")
+
+    def wait(self):
+        return 0
+
+
+def test_run_install_errors_when_a_service_times_out(tmp_path):
+    """Overall status must not read 'ready' when a health check timed out."""
+
+    def fake_poll(name, url, timeout_secs=300):
+        with installer._lock:
+            installer._install_state["services"][name] = "timeout"
+
+    with (
+        patch.object(installer.subprocess, "Popen", return_value=_FakeProc()),
+        patch.object(installer, "_poll_service", side_effect=fake_poll),
+    ):
+        installer._run_install(tmp_path, SAMPLE_SETTINGS)
+
+    status = installer.install_status()
+    assert status["status"] == "error"
+    assert "sonarr" in status["error"]
+
+
+def test_run_install_ready_when_all_services_healthy(tmp_path):
+    def fake_poll(name, url, timeout_secs=300):
+        with installer._lock:
+            installer._install_state["services"][name] = "ready"
+
+    with (
+        patch.object(installer.subprocess, "Popen", return_value=_FakeProc()),
+        patch.object(installer, "_poll_service", side_effect=fake_poll),
+    ):
+        installer._run_install(tmp_path, SAMPLE_SETTINGS)
+
+    assert installer.install_status()["status"] == "ready"
