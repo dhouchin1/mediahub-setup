@@ -133,6 +133,19 @@ def test_render_compose_receiver_omits_arr(tmp_path):
     assert "mediahub-qbittorrent" not in text
 
 
+def test_render_compose_jellyfin_does_not_advertise_localhost(tmp_path):
+    """PublishedServerUrl=localhost told every remote/casting client to
+    connect to itself; leave it unset so Jellyfin auto-detects."""
+    settings = {
+        **SAMPLE_SETTINGS,
+        "enabled_services": ["jellyfin"],
+        "ports": {**SAMPLE_SETTINGS["ports"], "jellyfin": 8096},
+    }
+    text = installer.render_compose(tmp_path, settings).read_text()
+    assert "mediahub-jellyfin" in text
+    assert "JELLYFIN_PublishedServerUrl" not in text
+
+
 def _settings_with_syncthing(**extra):
     return {
         **SAMPLE_SETTINGS,
