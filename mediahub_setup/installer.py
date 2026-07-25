@@ -181,11 +181,17 @@ def _log(line: str) -> None:
 
 
 def _poll_service(name: str, url: str, timeout_secs: int = 300) -> None:
-    """Poll ``url`` until any HTTP response arrives or timeout."""
+    """Poll ``url`` until a non-5xx HTTP response arrives or timeout.
+
+    4xx (e.g. an auth challenge) still proves the service is up; a 5xx means
+    the process behind the port is answering but broken, so keep waiting.
+    """
     deadline = time.monotonic() + timeout_secs
     while time.monotonic() < deadline:
         try:
-            requests.get(url, timeout=3)
+            resp = requests.get(url, timeout=3)
+            if resp.status_code >= 500:
+                raise RuntimeError(f"HTTP {resp.status_code}")
             with _lock:
                 _install_state["services"][name] = "ready"
             _log(f"[health] {name} is ready at {url}")
@@ -267,9 +273,21 @@ def _run_install(install_dir: Path, settings: dict) -> None:
         t.join()
 
     with _lock:
-        _install_state["status"] = "ready"
+        timed_out = sorted(
+            name for name, st in _install_state["services"].items() if st == "timeout"
+        )
+        if timed_out:
+            _install_state["status"] = "error"
+            _install_state["error"] = (
+                "Service(s) never became healthy: " + ", ".join(timed_out)
+            )
+        else:
+            _install_state["status"] = "ready"
         _install_state["finished_at"] = datetime.now(tz=UTC).isoformat()
-    _log("[install] All services polled — install complete.")
+    if timed_out:
+        _log(f"[install] ERROR: unhealthy service(s): {', '.join(timed_out)}")
+    else:
+        _log("[install] All services polled — install complete.")
 
 
 # ---------------------------------------------------------------------------

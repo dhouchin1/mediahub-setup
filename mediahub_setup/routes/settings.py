@@ -20,7 +20,11 @@ bp = Blueprint("settings", __name__, url_prefix="/settings")
 
 # A receiver has no *arr stack, so only services that work against the synced
 # library (or are infrastructure) are offered there.
-_RECEIVER_SAFE_OPTIONAL = {"jellyfin", "syncthing", "caddy"}
+# No caddy: the receiver skips the wiring step, which is the only place the
+# Caddyfile is generated — compose would mount a nonexistent file and Caddy
+# would crash-loop. Re-adding it requires wiring Caddyfile generation into
+# the receiver install path first.
+_RECEIVER_SAFE_OPTIONAL = {"jellyfin", "syncthing"}
 
 
 def _optional_services_for(role: str) -> dict:
@@ -123,6 +127,38 @@ def _validate(form: dict) -> dict[str, str]:
     return errors
 
 
+def _active_port_keys(role: str, enabled: list[str]) -> list[str]:
+    """Port keys of the services this deployment will actually run."""
+    keys = list(services.core_keys()) if roles.installs_arr(role) else []
+    keys += [k for k in enabled if k not in keys]
+    port_keys: list[str] = []
+    for key in keys:
+        pk = (services.ALL.get(key) or {}).get("port_key") or ""
+        if pk and pk not in port_keys:
+            port_keys.append(pk)
+    if "qbittorrent" in keys:
+        port_keys.append("qbittorrent_bt")
+    return port_keys
+
+
+def _duplicate_port_errors(ports: dict, active_keys: list[str]) -> dict[str, str]:
+    """Reject two active services mapped to the same host port — otherwise the
+    collision surfaces only as an opaque bind error at `docker compose up`."""
+    seen: dict[int, str] = {}
+    errs: dict[str, str] = {}
+    for key in active_keys:
+        try:
+            val = int(ports.get(key))
+        except (TypeError, ValueError):
+            continue
+        if val in seen:
+            errs[f"port_{key}"] = f"Port {val} is already used by {seen[val]}."
+            errs.setdefault(f"port_{seen[val]}", f"Port {val} is assigned more than once.")
+        else:
+            seen[val] = key
+    return errs
+
+
 def _parse_gluetun(f) -> dict:
     return {
         "provider": f.get("gluetun_provider", "").strip(),
@@ -219,6 +255,9 @@ def submit():
             "pgid": form_data["pgid"],
             **{f"port_{svc}": form_data[f"port_{svc}"] for svc in DEFAULT_PORTS},
         }
+    )
+    errors.update(
+        _duplicate_port_errors(form_data["ports"], _active_port_keys(roles.current(), enabled))
     )
     if "gluetun" in enabled:
         errors.update(_validate_gluetun(gluetun_cfg))

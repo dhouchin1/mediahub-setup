@@ -127,3 +127,12 @@ def test_validate_rejects_out_of_range_port():
 def test_role_aliases_normalise():
     assert build_settings("vps", {})["role"] == roles.SEEDBOX
     assert build_settings("home", {})["role"] == roles.RECEIVER
+
+
+def test_receiver_cannot_enable_caddy():
+    """A receiver never runs the wiring step, so the Caddyfile is never
+    generated — offering caddy would ship a guaranteed crash-looping
+    container mounting a nonexistent config."""
+    s = build_settings("receiver", {"services": ["caddy", "jellyfin"]})
+    assert "caddy" not in s["enabled_services"]
+    assert "jellyfin" in s["enabled_services"]

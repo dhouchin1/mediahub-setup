@@ -119,8 +119,10 @@ services:
     image: lscr.io/linuxserver/jellyfin:latest
     container_name: mediahub-jellyfin
     environment:
+      {# Deliberately no PublishedServerUrl override: baking in localhost made
+         Jellyfin advertise "localhost" to remote/casting clients; unset,
+         Jellyfin auto-detects the address the client actually used. #}
       <<: *common-env
-      JELLYFIN_PublishedServerUrl: http://localhost:{{ ports.jellyfin }}
     volumes:
       - ./config/jellyfin:/config
       - ${MEDIA_ROOT}/Media:/data/Media:ro
