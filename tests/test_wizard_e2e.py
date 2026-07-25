@@ -317,3 +317,37 @@ def test_done_escapes_hostile_password_in_alpine_attrs(client):
     assert "pw&#39;)" not in body
     # …and the safe ' form must be what's actually rendered.
     assert "pw\\u0027)" in body
+
+
+def test_settings_rejects_duplicate_host_ports(client):
+    """Two active services on the same host port must fail validation
+    instead of passing and dying later with an opaque compose bind error."""
+    r = client.post(
+        "/settings/",
+        data={
+            "tz": "UTC",
+            "puid": "501",
+            "pgid": "20",
+            "port_sonarr": "9696",  # collides with prowlarr's default
+        },
+    )
+    assert r.status_code == 422  # re-rendered form with errors, not a redirect
+    body = r.data.decode()
+    assert "already used by" in body
+    assert state.get("settings") is None
+
+
+def test_settings_allows_port_matching_disabled_service_default(client):
+    """Reusing the default port of a service that is NOT enabled is fine —
+    only ports of services that will actually run may collide."""
+    r = client.post(
+        "/settings/",
+        data={
+            "tz": "UTC",
+            "puid": "501",
+            "pgid": "20",
+            "port_sonarr": "8096",  # jellyfin's default, but jellyfin is off
+        },
+    )
+    assert r.status_code == 303
+    assert (state.get("settings") or {})["ports"]["sonarr"] == 8096
