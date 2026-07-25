@@ -30,7 +30,11 @@ from .system_settings import (
 
 # Mirrors routes/settings.py: a receiver has no *arr stack, so only services
 # that work against the synced library (or are infrastructure) make sense.
-_RECEIVER_SAFE_OPTIONAL = {"jellyfin", "syncthing", "caddy"}
+# No caddy: the receiver skips the wiring step, which is the only place the
+# Caddyfile is generated — compose would mount a nonexistent file and Caddy
+# would crash-loop. Re-adding it requires wiring Caddyfile generation into
+# the receiver install path first.
+_RECEIVER_SAFE_OPTIONAL = {"jellyfin", "syncthing"}
 
 
 class SettingsError(ValueError):
