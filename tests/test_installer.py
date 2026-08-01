@@ -102,6 +102,22 @@ def test_render_compose_keeps_media_root_env_var(tmp_path):
     assert "${MEDIA_ROOT}" in out.read_text()
 
 
+def test_render_compose_web_qbittorrent_url_without_vpn(tmp_path):
+    """With no VPN, the web dashboard reaches qBittorrent by its own hostname."""
+    settings = {**SAMPLE_SETTINGS, "enabled_services": ["web"]}
+    text = installer.render_compose(tmp_path, settings).read_text()
+    assert "QBITTORRENT_URL: http://qbittorrent:8080" in text
+
+
+def test_render_compose_web_qbittorrent_url_uses_gluetun_when_vpn_enabled(tmp_path):
+    """When gluetun owns qBittorrent's netns it has no hostname of its own, so
+    the web dashboard must reach qBittorrent as `gluetun`, not `qbittorrent`."""
+    settings = {**SAMPLE_SETTINGS, "enabled_services": ["web", "gluetun"]}
+    text = installer.render_compose(tmp_path, settings).read_text()
+    assert "QBITTORRENT_URL: http://gluetun:8080" in text
+    assert "QBITTORRENT_URL: http://qbittorrent:8080" not in text
+
+
 def test_render_compose_custom_ports(tmp_path):
     settings = dict(SAMPLE_SETTINGS)
     settings["ports"] = dict(SAMPLE_SETTINGS["ports"])
