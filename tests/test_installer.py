@@ -312,6 +312,15 @@ def test_render_env_writes_qbittorrent_credentials(tmp_path):
     assert "QBITTORRENT_PASSWORD=" in text
 
 
+def test_render_env_qbittorrent_password_blank_not_literal_none(tmp_path):
+    """With auto-passwords off, shared_password is None — .env must get a
+    blank value, never the literal string 'None'."""
+    settings = {**SAMPLE_SETTINGS, "shared_password": None}
+    text = installer.render_env(tmp_path, SAMPLE_DRIVE, settings).read_text()
+    assert "QBITTORRENT_PASSWORD=\n" in text or text.rstrip().endswith("QBITTORRENT_PASSWORD=")
+    assert "QBITTORRENT_PASSWORD=None" not in text
+
+
 def test_render_env_backfills_api_keys_from_settings(tmp_path):
     """When the wiring step has populated api_keys, render_env writes them in."""
     settings = {**SAMPLE_SETTINGS, "api_keys": {"sonarr": "abc123", "radarr": "def456"}}
