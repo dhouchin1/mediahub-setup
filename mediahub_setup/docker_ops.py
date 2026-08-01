@@ -231,7 +231,11 @@ def update_status() -> dict[str, Any]:
 
 
 def _log_update(line: str) -> None:
-    _update_state["log_lines"].append(line)
+    # Take the lock: this runs on the background compose thread while the
+    # dashboard poller snapshots the same deque in update_status(). Without
+    # it, list(deque) can hit "deque mutated during iteration".
+    with _update_lock:
+        _update_state["log_lines"].append(line)
 
 
 def _run_compose_update(install_dir: Path) -> None:

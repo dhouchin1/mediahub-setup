@@ -136,7 +136,10 @@ def render_env(install_dir: Path, drive: dict, settings: dict) -> Path:
     Returns the path to the written file.
     """
     api_keys: dict[str, str] = settings.get("api_keys", {}) or {}
-    qb_password = settings.get("qbittorrent_password") or settings.get("shared_password", "")
+    # `shared_password` is stored as None when the user turns auto-passwords
+    # off, so a bare `.get(..., "")` still yields None (the key exists). Chain
+    # `or ""` so .env gets a blank, never the literal string "None".
+    qb_password = settings.get("qbittorrent_password") or settings.get("shared_password") or ""
     qb_username = settings.get("qbittorrent_username", "admin")
     gluetun_cfg: dict = settings.get("gluetun") or {}
 
