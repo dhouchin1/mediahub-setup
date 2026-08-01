@@ -155,3 +155,12 @@ def test_public_mode_web_handles_root(tmp_path):
     path = render_caddyfile(domain="mediahub.local", enabled=["web"], ports={}, mode="public")
     text = path.read_text()
     assert "reverse_proxy web:3000" in text
+
+
+def test_public_mode_web_uses_catch_all_matcher(tmp_path):
+    """Web must be a `/*` catch-all, not an exact `/`, or the dashboard's
+    /_next/*, /api/* and static assets 404 in public mode."""
+    path = render_caddyfile(domain="mediahub.local", enabled=["web"], ports={}, mode="public")
+    text = path.read_text()
+    assert "handle /* {" in text
+    assert "handle / {" not in text

@@ -161,7 +161,11 @@ def _render_public(
     lines.append("")
     lines.append("    # Bare-path landing")
     if "web" in enabled:
-        lines.append("    handle / {")
+        # Catch-all (`/*`, not the exact-match `/`) so the whole dashboard —
+        # /_next/*, /api/*, client-side routes and static assets — is
+        # proxied, not just the bare root. The service `handle_path` blocks
+        # above are more specific and still win for their prefixes.
+        lines.append("    handle /* {")
         lines.append(f"        reverse_proxy web:{_INTERNAL_PORT['web']}")
         lines.append("    }")
     else:
