@@ -9,6 +9,7 @@ resumes where you left off.
 from __future__ import annotations
 
 import json
+import os
 import threading
 from pathlib import Path
 from typing import Any
@@ -29,7 +30,15 @@ def _load() -> None:
 
 def _save() -> None:
     try:
-        _STATE_PATH.write_text(json.dumps(_state, indent=2))
+        # This file holds plaintext secrets (the shared/qBittorrent password
+        # and VPN credentials via the persisted `settings` dict), so it must
+        # be owner-only — matching the 0600 host-secret files written
+        # elsewhere. Create it 0600 from the start (no world-readable window)
+        # and tighten any pre-existing file left over from an older version.
+        fd = os.open(_STATE_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as fh:
+            fh.write(json.dumps(_state, indent=2))
+        os.chmod(_STATE_PATH, 0o600)
     except OSError:
         pass  # non-fatal — state will just not persist across runs
 
