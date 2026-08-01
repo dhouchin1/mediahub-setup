@@ -179,13 +179,13 @@ class SyncthingClient:
         ``folder_type`` must be ``"sendonly"`` or ``"receiveonly"``.
 
         Safety rule: if ``folder_type == "receiveonly"`` and *versioning* is
-        ``None``, the default staggered policy with unlimited retention is
-        injected automatically, so remote deletions are parked in
+        falsy (``None`` or ``{}``), the default staggered policy with unlimited
+        retention is injected automatically, so remote deletions are parked in
         ``.stversions`` instead of being applied locally.
 
         PUT /rest/config/folders/{folder_id}
         """
-        if folder_type == "receiveonly" and versioning is None:
+        if folder_type == "receiveonly" and not versioning:
             versioning = _RECEIVEONLY_DEFAULT_VERSIONING
 
         body: dict = {

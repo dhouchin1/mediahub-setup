@@ -292,6 +292,27 @@ def test_set_folder_receiveonly_respects_explicit_versioning():
     assert body["versioning"] == custom_versioning
 
 
+def test_set_folder_receiveonly_empty_versioning_gets_default():
+    """An empty-dict versioning is falsy and must NOT bypass the safety
+    default — otherwise a receive-only folder ends up with no versioning and
+    remote deletions destroy the local copy instead of parking in .stversions."""
+    client = SyncthingClient("http://localhost:8384", api_key="k")
+    mock_put = MagicMock(return_value=_ok_response({}))
+
+    with patch.object(client._session, "put", mock_put):
+        client.set_folder(
+            folder_id="media-lib",
+            label="Media Library",
+            path="/data/Media",
+            folder_type="receiveonly",
+            device_ids=[],
+            versioning={},
+        )
+
+    body = mock_put.call_args[1]["json"]
+    assert body["versioning"] == _RECEIVEONLY_DEFAULT_VERSIONING
+
+
 # ---------------------------------------------------------------------------
 # share_folder_with — idempotent
 # ---------------------------------------------------------------------------
