@@ -303,3 +303,46 @@ def test_settings_rerender_json_escapes_alpine_strings(client):
     assert 'caddyMode: "loc\\u0027al"' in body
     assert "sharedPassword: '" not in body
     assert "&#39;+alert" not in body
+
+
+def test_install_page_renders_while_install_is_running(client):
+    """Regression: once an install has started, /install/ switches to the
+    in-progress branch which includes the status partial *with context*.
+    That partial reads ``data`` and ``ports`` (the names the /install/status
+    poll passes), so the index route must pass them too — otherwise every
+    visit after "Start install" raised UndefinedError (HTTP 500)."""
+    from unittest.mock import patch
+
+    from mediahub_setup import installer
+
+    state.update(
+        drive={"name": "X", "mount_path": "/Volumes/MediaHub", "writable": True},
+        settings={"tz": "UTC", "puid": 501, "pgid": 20, "ports": {"sonarr": 8989}},
+    )
+    running = {
+        "status": "running",
+        "progress": 50,
+        "services": {"sonarr": "starting"},
+        "log_lines": ["[install] docker compose up -d …"],
+        "error": None,
+        "started_at": None,
+        "finished_at": None,
+        "compose_path": "",
+        "env_path": "",
+    }
+    with patch.object(installer, "install_status", return_value=running):
+        r = client.get("/install/")
+    assert r.status_code == 200, r.data[:300]
+    assert b"Installing" in r.data
+    assert b":8989" in r.data
+
+
+def test_install_status_tolerates_settings_without_ports(client):
+    """A persisted settings blob lacking ``ports`` must not turn the 1 s
+    HTMX poll into a permanent 500."""
+    state.update(
+        drive={"name": "X", "mount_path": "/Volumes/MediaHub", "writable": True},
+        settings={"tz": "UTC", "puid": 501, "pgid": 20},
+    )
+    r = client.get("/install/status")
+    assert r.status_code == 200

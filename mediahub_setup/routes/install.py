@@ -72,6 +72,11 @@ def index():
         install_dir=install_dir,
         services=svc_list,
         status=status,
+        # The in-progress/complete branch includes _partials/install_status.html
+        # "with context", which reads `data` and `ports` — the same names the
+        # /install/status poll passes. Without them any non-idle visit 500s.
+        data=status,
+        ports=(settings or {}).get("ports") or {},
     )
 
 
@@ -142,7 +147,7 @@ def status():
             },
         )
 
-    ports = settings["ports"] if settings else {}
+    ports = (settings or {}).get("ports") or {}
     svc_list = _services_for_settings(settings)
 
     return render_template(
