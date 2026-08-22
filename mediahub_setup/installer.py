@@ -122,7 +122,35 @@ def render_compose(install_dir: Path, settings: dict) -> Path:
     out = install_dir / "docker-compose.yml"
     install_dir.mkdir(parents=True, exist_ok=True)
     out.write_text(rendered)
+    if "caddy" in enabled:
+        render_caddy_config(install_dir, settings)
     return out
+
+
+def render_caddy_config(install_dir: Path, settings: dict) -> Path:
+    """Write ``<install_dir>/config/caddy/Caddyfile`` for the chosen mode.
+
+    The compose template bind-mounts this file read-only into the caddy
+    container, so it has to exist *before* ``docker compose up`` — Docker
+    materialises a missing bind-mount source as an empty directory, which
+    makes Caddy fail to boot and (in local mode, where Caddy is the only
+    thing publishing the service ports) leaves every health check and
+    wiring call connection-refused. The wiring step re-renders the same
+    content later, which is harmless.
+    """
+    from .caddy import render_caddyfile
+
+    enabled = settings.get("enabled_services") or []
+    caddy_cfg = settings.get("caddy") or {}
+    mode = settings.get("caddy_mode") or caddy_cfg.get("mode") or "local"
+    return render_caddyfile(
+        domain=caddy_cfg.get("domain") or "mediahub.local",
+        enabled=enabled,
+        ports=settings.get("ports") or {},
+        mode=mode,
+        qbittorrent_host="gluetun" if "gluetun" in enabled else "qbittorrent",
+        config_dir=install_dir / "config" / "caddy",
+    )
 
 
 def render_env(install_dir: Path, drive: dict, settings: dict) -> Path:
@@ -237,7 +265,7 @@ def _run_install(install_dir: Path, settings: dict) -> None:
     ports = settings.get("ports", {})
     enabled = settings.get("enabled_services", [])
     core = services.core_keys() if roles.installs_arr(roles.normalize(settings.get("role"))) else []
-    all_to_poll = core + [k for k in enabled if k != "recyclarr"]
+    all_to_poll = core + [k for k in enabled if services.has_port(k)]
 
     service_urls: dict[str, str] = {}
     for key in all_to_poll:
@@ -294,7 +322,11 @@ def start_install(install_dir: Path, drive: dict, settings: dict) -> bool:
             if roles.installs_arr(roles.normalize(settings.get("role")))
             else []
         )
-        all_services = core + [k for k in enabled if k != "recyclarr"]
+        # Only services that expose a pollable port get a health slot.
+        # Anything without one (recyclarr is a CLI tool, gluetun is a
+        # network sidecar) can never become ready/timeout, so seeding it
+        # left the page at 'pending' forever and capped progress below 100%.
+        all_services = core + [k for k in enabled if services.has_port(k)]
         _install_state.update(
             {
                 "status": "running",

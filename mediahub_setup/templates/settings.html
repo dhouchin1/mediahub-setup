@@ -7,7 +7,7 @@
      x-data="{
        portsOpen: false,
        autoPasswords: {{ 'true' if auto_passwords else 'false' }},
-       sharedPassword: '{{ shared_password | default('') }}',
+       sharedPassword: {{ shared_password | default('') | tojson }},
        enabled: {{ (enabled_services or []) | tojson }},
        isEnabled(key) { return this.enabled.includes(key); },
        toggle(key) {
@@ -303,7 +303,7 @@
 
       <!-- Caddy reverse-proxy options -->
       <div x-show="isEnabled('caddy')" x-cloak class="space-y-3 pt-3 border-t border-slate-700/50"
-           x-data="{ caddyMode: '{{ caddy.mode if caddy and caddy.mode else 'local' }}' }">
+           x-data="{ caddyMode: {{ (caddy.mode if caddy and caddy.mode else 'local') | tojson }} }">
         <div>
           <p class="text-xs font-semibold uppercase tracking-wider text-sky-300/80 mb-2">Caddy reverse proxy</p>
           <p class="text-xs text-slate-400 mb-3">Pick how the proxy exposes your services.</p>
@@ -380,7 +380,7 @@
 
       <!-- Gluetun VPN egress -->
       <div x-show="isEnabled('gluetun')" x-cloak class="space-y-3 pt-3 border-t border-slate-700/50"
-           x-data="{ vpnType: '{{ gluetun.vpn_type if gluetun else 'wireguard' }}' }">
+           x-data="{ vpnType: {{ (gluetun.vpn_type if gluetun else 'wireguard') | tojson }} }">
         <div>
           <p class="text-xs font-semibold uppercase tracking-wider text-rose-300/80 mb-2">qBittorrent VPN egress (Gluetun)</p>
           <p class="text-xs text-slate-400 mb-3">

@@ -28,14 +28,10 @@ def _services_for_settings(settings: dict | None) -> list[dict]:
     out = list(CORE_SERVICES) if roles.installs_arr(_role(settings)) else []
     enabled = (settings or {}).get("enabled_services") or []
     for key in enabled:
-        if key == "recyclarr":
-            continue  # CLI tool, no port to poll
-        svc = services.ALL.get(key)
-        if not svc:
-            continue
-        out.append(
-            {"key": key, "label": svc.get("name", key), "port_key": svc.get("port_key") or key}
-        )
+        if not services.has_port(key):
+            continue  # no web port to poll (recyclarr CLI, gluetun sidecar)
+        svc = services.ALL[key]
+        out.append({"key": key, "label": svc.get("name", key), "port_key": svc["port_key"]})
     return out
 
 
@@ -72,6 +68,11 @@ def index():
         install_dir=install_dir,
         services=svc_list,
         status=status,
+        # The in-progress/complete branch includes _partials/install_status.html
+        # "with context", which reads `data` and `ports` — the same names the
+        # /install/status poll passes. Without them any non-idle visit 500s.
+        data=status,
+        ports=(settings or {}).get("ports") or {},
     )
 
 
@@ -142,7 +143,7 @@ def status():
             },
         )
 
-    ports = settings["ports"] if settings else {}
+    ports = (settings or {}).get("ports") or {}
     svc_list = _services_for_settings(settings)
 
     return render_template(

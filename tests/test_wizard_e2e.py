@@ -282,3 +282,88 @@ def test_reset_clears_all_state(client):
     assert r.status_code == 303
     assert state.get("drive") is None
     assert state.get("settings") is None
+
+
+def test_settings_rerender_json_escapes_alpine_strings(client):
+    """Regression: values echoed back into Alpine ``x-data`` JS string
+    literals on the 422 re-render must be JSON-encoded. HTML entity
+    escaping alone is not enough — the browser decodes ``&#39;`` back to
+    ``'`` before Alpine evaluates the attribute as JavaScript, so a quote
+    in the shared password (or caddy mode) broke out of the string."""
+    state.set("role", "all-in-one")
+    r = client.post(
+        "/settings/",
+        data={"tz": "", "shared_password": "x'+alert(1)+'x", "caddy_mode": "loc'al"},
+    )
+    assert r.status_code == 422
+    body = r.data.decode()
+    # Flask's tojson escapes quotes to \u0027, so the value never contains a
+    # raw quote the browser could decode into a JS string terminator.
+    assert 'sharedPassword: "x\\u0027+alert(1)+\\u0027x"' in body
+    assert 'caddyMode: "loc\\u0027al"' in body
+    assert "sharedPassword: '" not in body
+    assert "&#39;+alert" not in body
+
+
+def test_install_page_renders_while_install_is_running(client):
+    """Regression: once an install has started, /install/ switches to the
+    in-progress branch which includes the status partial *with context*.
+    That partial reads ``data`` and ``ports`` (the names the /install/status
+    poll passes), so the index route must pass them too — otherwise every
+    visit after "Start install" raised UndefinedError (HTTP 500)."""
+    from unittest.mock import patch
+
+    from mediahub_setup import installer
+
+    state.update(
+        drive={"name": "X", "mount_path": "/Volumes/MediaHub", "writable": True},
+        settings={"tz": "UTC", "puid": 501, "pgid": 20, "ports": {"sonarr": 8989}},
+    )
+    running = {
+        "status": "running",
+        "progress": 50,
+        "services": {"sonarr": "starting"},
+        "log_lines": ["[install] docker compose up -d …"],
+        "error": None,
+        "started_at": None,
+        "finished_at": None,
+        "compose_path": "",
+        "env_path": "",
+    }
+    with patch.object(installer, "install_status", return_value=running):
+        r = client.get("/install/")
+    assert r.status_code == 200, r.data[:300]
+    assert b"Installing" in r.data
+    assert b":8989" in r.data
+
+
+def test_install_status_tolerates_settings_without_ports(client):
+    """A persisted settings blob lacking ``ports`` must not turn the 1 s
+    HTMX poll into a permanent 500."""
+    state.update(
+        drive={"name": "X", "mount_path": "/Volumes/MediaHub", "writable": True},
+        settings={"tz": "UTC", "puid": 501, "pgid": 20},
+    )
+    r = client.get("/install/status")
+    assert r.status_code == 200
+
+
+def test_install_service_list_omits_portless_services(client):
+    from mediahub_setup.routes.install import _services_for_settings
+
+    keys = [s["key"] for s in _services_for_settings({"enabled_services": ["gluetun", "bazarr"]})]
+    assert "gluetun" not in keys
+    assert "bazarr" in keys
+    assert "sonarr" in keys
+
+
+def test_wiring_status_partial_shows_run_level_error(client):
+    from unittest.mock import patch
+
+    from mediahub_setup import wiring_runner
+
+    failed = {"phase": "failed", "tasks": [], "error": "context exploded <badly>"}
+    with patch.object(wiring_runner, "wiring_status", return_value=failed):
+        r = client.get("/wiring/status")
+    assert r.status_code == 200
+    assert b"context exploded &lt;badly&gt;" in r.data

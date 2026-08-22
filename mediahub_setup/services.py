@@ -301,6 +301,15 @@ def core_keys() -> list[str]:
     return list(CORE.keys())
 
 
+def has_port(key: str) -> bool:
+    """True if ``key`` is a known service with a web port to poll/proxy.
+
+    False for unknown keys and for services with an empty ``port_key``
+    (recyclarr is a CLI tool, gluetun is a network sidecar).
+    """
+    return bool(ALL.get(key, {}).get("port_key"))
+
+
 def optional_keys() -> list[str]:
     """Service keys that the user toggles on/off."""
     return list(OPTIONAL.keys())

@@ -105,8 +105,14 @@ ensure_docker() {
     warn "Added you to the 'docker' group — log out/in (or run 'newgrp docker') for it to take effect."
   else
     warn "Docker not found. Install it first: https://docs.docker.com/engine/install/"
-    [[ "$OS" == "Linux" ]] && warn "  (or re-run with MEDIAHUB_INSTALL_DOCKER=1 to auto-install Docker Engine)"
+    # Plain `[[ ... ]] && warn` as the last command makes this function
+    # return 1 on macOS, and under `set -e` that aborted the whole script
+    # before mediahub-setup was ever installed. Use an explicit if.
+    if [[ "$OS" == "Linux" ]]; then
+      warn "  (or re-run with MEDIAHUB_INSTALL_DOCKER=1 to auto-install Docker Engine)"
+    fi
   fi
+  return 0
 }
 
 # ── Run ──────────────────────────────────────────────────────────────────────

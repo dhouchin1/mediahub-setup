@@ -186,20 +186,24 @@ def render_caddyfile(
     ports: dict[str, int],
     mode: str = "local",
     qbittorrent_host: str = "qbittorrent",
+    config_dir: Path | None = None,
 ) -> Path:
     """Write the Caddyfile under ``~/mediahub/config/caddy/``.
 
     ``mode`` selects ``"local"`` (per-port + IP allowlist) or ``"public"``
     (path-routed with auto-HTTPS). ``qbittorrent_host`` overrides qBittorrent's
     upstream host (set to ``"gluetun"`` when it egresses through the VPN).
+    ``config_dir`` overrides the output directory (the installer passes
+    ``<install_dir>/config/caddy`` so the file exists before compose up).
     """
-    CADDY_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    config_dir = config_dir or CADDY_CONFIG_DIR
+    config_dir.mkdir(parents=True, exist_ok=True)
 
     if mode == "public":
         content = _render_public(domain, enabled, ports, qbittorrent_host)
     else:
         content = _render_local(enabled, ports, qbittorrent_host)
 
-    caddyfile = CADDY_CONFIG_DIR / "Caddyfile"
+    caddyfile = config_dir / "Caddyfile"
     caddyfile.write_text(content if content.endswith("\n") else content + "\n")
     return caddyfile

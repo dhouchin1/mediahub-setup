@@ -23,7 +23,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import roles, state
+from . import roles, services, state
 from .arr_client import (
     ProwlarrClient,
     QBittorrentClient,
@@ -47,6 +47,7 @@ _lock = threading.Lock()
 _status: dict[str, Any] = {
     "phase": "idle",  # idle | running | complete | failed
     "tasks": [],
+    "error": "",  # set when the run died outside any single task
 }
 
 _thread: threading.Thread | None = None
@@ -353,7 +354,7 @@ def _wire_notifiarr_webhooks(ctx: WiringContext) -> str | None:
     wire_notifiarr_to_arr(
         sonarr=ctx.sonarr_client,
         radarr=ctx.radarr_client,
-        notifiarr_internal_url=f"http://notifiarr:{ctx.ports.get('notifiarr', 5454)}",
+        notifiarr_internal_url=_internal_url("notifiarr"),
     )
     return None
 
@@ -646,6 +647,7 @@ def wiring_status() -> dict[str, Any]:
         return {
             "phase": _status["phase"],
             "tasks": list(_status["tasks"]),
+            "error": _status.get("error", ""),
         }
 
 
@@ -667,6 +669,7 @@ def start_wiring() -> None:
         _status = {
             "phase": "running",
             "tasks": _initial_tasks(names),
+            "error": "",
         }
 
     _thread = threading.Thread(target=_run_wiring, args=(plan,), daemon=True)
@@ -684,6 +687,12 @@ def _set_task(name: str, status: str, message: str = "") -> None:
             if task["name"] == name:
                 _status["tasks"][i] = {"name": name, "status": status, "message": message}
                 return
+
+
+def _internal_url(key: str) -> str:
+    """``http://<container>:<container port>`` for a service on the compose
+    network — independent of whichever host port the user chose."""
+    return f"http://{key}:{services.ALL[key]['internal_port']}"
 
 
 def _build_context() -> WiringContext:
@@ -709,13 +718,16 @@ def _build_context() -> WiringContext:
         enabled=enabled,
         role=roles.current(),
         qb_host="gluetun" if "gluetun" in enabled else "qbittorrent",
-        sonarr_internal=f"http://sonarr:{sonarr_port}",
-        radarr_internal=f"http://radarr:{radarr_port}",
-        prowlarr_internal=f"http://prowlarr:{prowlarr_port}",
-        jellyfin_internal=f"http://jellyfin:{jellyfin_port}",
-        overseerr_internal=f"http://overseerr:{overseerr_port}",
-        jellyseerr_internal=f"http://jellyseerr:{jellyseerr_port}",
-        bazarr_internal=f"http://bazarr:{bazarr_port}",
+        # Container-to-container URLs use the *container* port, which is
+        # fixed by the compose template (e.g. "{{ ports.sonarr }}:8989").
+        # The host-side port the user picked only applies to localhost.
+        sonarr_internal=_internal_url("sonarr"),
+        radarr_internal=_internal_url("radarr"),
+        prowlarr_internal=_internal_url("prowlarr"),
+        jellyfin_internal=_internal_url("jellyfin"),
+        overseerr_internal=_internal_url("overseerr"),
+        jellyseerr_internal=_internal_url("jellyseerr"),
+        bazarr_internal=_internal_url("bazarr"),
         qb_url=f"http://localhost:{qb_port}",
         sonarr_url=f"http://localhost:{sonarr_port}",
         radarr_url=f"http://localhost:{radarr_port}",
@@ -728,8 +740,41 @@ def _build_context() -> WiringContext:
     )
 
 
+def _persist_wiring(ctx: WiringContext | None, phase: str, error: str = "") -> None:
+    """Write the run outcome to persistent state.
+
+    Called on success *and* failure: the repair page reads the persisted
+    task list to show which tasks failed and which still need to run, and
+    that only works if failed runs are recorded too. A failed run must not
+    wipe credentials captured by an earlier successful one, so existing
+    values are kept and only overwritten by what this run discovered.
+    """
+    with _lock:
+        tasks_snapshot = list(_status["tasks"])
+
+    prev = state.get("wiring") or {}
+    record: dict[str, Any] = {**prev, "status": phase, "tasks": tasks_snapshot, "error": error}
+    if ctx is not None:
+        api_keys = {
+            k: v for k, v in ctx.api_keys.items() if k in ("sonarr", "radarr", "prowlarr", "bazarr")
+        }
+        record["api_keys"] = {**(prev.get("api_keys") or {}), **api_keys}
+        record["qb_credentials"] = {
+            "username": ctx.settings.get("qbittorrent_username", "admin"),
+            "password": ctx.shared_password,
+        }
+        if phase == "complete" or ctx.syncthing_device_id:
+            record["syncthing"] = {
+                "device_id": ctx.syncthing_device_id,
+                "folder_id": ctx.syncthing_folder_id,
+                "folder_type": ctx.syncthing_folder_type,
+            }
+    state.set("wiring", record)
+
+
 def _run_wiring(plan: list[WiringTask]) -> None:
     """Execute the prebuilt task plan in order, marking each task."""
+    ctx: WiringContext | None = None
     try:
         ctx = _build_context()
 
@@ -741,41 +786,24 @@ def _run_wiring(plan: list[WiringTask]) -> None:
             except Exception as exc:
                 _set_task(task.name, "failed", str(exc))
                 _abort()
+                _persist_wiring(ctx, "failed")
                 return
 
-        # ----------------------------------------------------------------
-        # All done — persist state
-        # ----------------------------------------------------------------
         with _lock:
             _status["phase"] = "complete"
-            tasks_snapshot = list(_status["tasks"])
-
-        state.set(
-            "wiring",
-            {
-                "status": "complete",
-                "api_keys": {
-                    k: v
-                    for k, v in ctx.api_keys.items()
-                    if k in ("sonarr", "radarr", "prowlarr", "bazarr")
-                },
-                "qb_credentials": {
-                    "username": ctx.settings.get("qbittorrent_username", "admin"),
-                    "password": ctx.shared_password,
-                },
-                "syncthing": {
-                    "device_id": ctx.syncthing_device_id,
-                    "folder_id": ctx.syncthing_folder_id,
-                    "folder_type": ctx.syncthing_folder_type,
-                },
-                "tasks": tasks_snapshot,
-            },
-        )
+        _persist_wiring(ctx, "complete")
 
     except Exception as exc:
+        # Died outside any single task (e.g. _build_context on corrupt
+        # settings). Surface the message — it is the only diagnostic the
+        # user gets — and mark the untouched tasks skipped.
         with _lock:
-            _status["phase"] = "failed"
             _status["error"] = str(exc)
+        _abort()
+        try:
+            _persist_wiring(ctx, "failed", error=str(exc))
+        except Exception:  # noqa: BLE001 — never let reporting mask the real error
+            pass
 
 
 def _abort() -> None:

@@ -168,3 +168,127 @@ def test_initial_status_is_idle():
     """wiring_status() must report phase='idle' before start_wiring() is called."""
     status = wiring_runner.wiring_status()
     assert status["phase"] == "idle"
+
+
+# ---------------------------------------------------------------------------
+# _build_context — container vs host ports
+# ---------------------------------------------------------------------------
+
+
+def test_build_context_internal_urls_use_container_ports_not_host_ports():
+    """Regression: a user who moves Sonarr to host port 8990 (because 8989
+    is taken) still has Sonarr listening on 8989 *inside* the compose
+    network. The *_internal URLs handed to Prowlarr/Bazarr/Recyclarr were
+    built from the host port, so every cross-app call went to a port
+    nothing listened on — while the wizard reported green."""
+    state.set(
+        "settings",
+        {
+            "ports": {"sonarr": 8990, "radarr": 7879, "prowlarr": 9697, "bazarr": 6768},
+            "enabled_services": ["bazarr"],
+        },
+    )
+    ctx = wiring_runner._build_context()
+    assert ctx.sonarr_internal == "http://sonarr:8989"
+    assert ctx.radarr_internal == "http://radarr:7878"
+    assert ctx.prowlarr_internal == "http://prowlarr:9696"
+    assert ctx.bazarr_internal == "http://bazarr:6767"
+    # Host-side URLs still honour the user's override.
+    assert ctx.sonarr_url == "http://localhost:8990"
+    assert ctx.radarr_url == "http://localhost:7879"
+
+
+def test_build_context_jellyseerr_internal_uses_container_port():
+    """Jellyseerr's default host port is 5056 but it listens on 5055 inside."""
+    state.set("settings", {"ports": {"jellyseerr": 5056}})
+    assert wiring_runner._build_context().jellyseerr_internal == "http://jellyseerr:5055"
+
+
+# ---------------------------------------------------------------------------
+# _run_wiring — failures must be persisted and surfaced
+# ---------------------------------------------------------------------------
+
+
+def _prime_status(names):
+    wiring_runner._status = {
+        "phase": "running",
+        "tasks": wiring_runner._initial_tasks(names),
+        "error": "",
+    }
+
+
+def test_failed_task_is_persisted_for_the_repair_page(monkeypatch):
+    """Regression: only successful runs wrote state['wiring'], so the repair
+    page's 'Previously failed' list was permanently empty and a half-wired
+    stack looked like wiring had never run."""
+    from unittest.mock import MagicMock
+
+    ctx = MagicMock()
+    ctx.api_keys = {"sonarr": "abc", "jellyfin": "ignored"}
+    ctx.settings = {"qbittorrent_username": "admin"}
+    ctx.shared_password = "pw"
+    ctx.syncthing_device_id = ""
+    monkeypatch.setattr(wiring_runner, "_build_context", lambda: ctx)
+
+    def boom(_ctx):
+        raise RuntimeError("Prowlarr not reachable")
+
+    plan = [
+        WiringTask("Task one", lambda c: "ok", []),
+        WiringTask("Task two", boom, []),
+        WiringTask("Task three", lambda c: "never", []),
+    ]
+    _prime_status([t.name for t in plan])
+    wiring_runner._run_wiring(plan)
+
+    assert wiring_runner.wiring_status()["phase"] == "failed"
+    saved = state.get("wiring")
+    assert saved["status"] == "failed"
+    by_name = {t["name"]: t for t in saved["tasks"]}
+    assert by_name["Task one"]["status"] == "ok"
+    assert by_name["Task two"]["status"] == "failed"
+    assert "Prowlarr not reachable" in by_name["Task two"]["message"]
+    assert by_name["Task three"]["status"] == "skipped"
+    assert saved["api_keys"] == {"sonarr": "abc"}
+
+
+def test_failed_rerun_keeps_api_keys_from_earlier_success(monkeypatch):
+    from unittest.mock import MagicMock
+
+    state.set("wiring", {"status": "complete", "api_keys": {"sonarr": "old", "radarr": "r"}})
+    ctx = MagicMock()
+    ctx.api_keys = {"sonarr": "new"}
+    ctx.settings = {}
+    ctx.shared_password = "pw"
+    ctx.syncthing_device_id = ""
+    monkeypatch.setattr(wiring_runner, "_build_context", lambda: ctx)
+
+    def boom(_ctx):
+        raise RuntimeError("nope")
+
+    plan = [WiringTask("Only", boom, [])]
+    _prime_status(["Only"])
+    wiring_runner._run_wiring(plan)
+    assert state.get("wiring")["api_keys"] == {"sonarr": "new", "radarr": "r"}
+
+
+def test_context_build_failure_surfaces_error_and_skips_tasks(monkeypatch):
+    """Regression: an exception outside any task (corrupt settings) set an
+    'error' that nothing ever read, and left every task 'pending' with no
+    explanation anywhere in the UI."""
+
+    def bad_context():
+        raise AttributeError("'list' object has no attribute 'get'")
+
+    monkeypatch.setattr(wiring_runner, "_build_context", bad_context)
+    plan = [WiringTask("Only", lambda c: "x", [])]
+    _prime_status(["Only"])
+    wiring_runner._run_wiring(plan)
+
+    status = wiring_runner.wiring_status()
+    assert status["phase"] == "failed"
+    assert "'list' object has no attribute 'get'" in status["error"]
+    assert status["tasks"][0]["status"] == "skipped"
+    saved = state.get("wiring")
+    assert saved["status"] == "failed"
+    assert "attribute 'get'" in saved["error"]
