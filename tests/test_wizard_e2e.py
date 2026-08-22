@@ -282,3 +282,24 @@ def test_reset_clears_all_state(client):
     assert r.status_code == 303
     assert state.get("drive") is None
     assert state.get("settings") is None
+
+
+def test_settings_rerender_json_escapes_alpine_strings(client):
+    """Regression: values echoed back into Alpine ``x-data`` JS string
+    literals on the 422 re-render must be JSON-encoded. HTML entity
+    escaping alone is not enough — the browser decodes ``&#39;`` back to
+    ``'`` before Alpine evaluates the attribute as JavaScript, so a quote
+    in the shared password (or caddy mode) broke out of the string."""
+    state.set("role", "all-in-one")
+    r = client.post(
+        "/settings/",
+        data={"tz": "", "shared_password": "x'+alert(1)+'x", "caddy_mode": "loc'al"},
+    )
+    assert r.status_code == 422
+    body = r.data.decode()
+    # Flask's tojson escapes quotes to \u0027, so the value never contains a
+    # raw quote the browser could decode into a JS string terminator.
+    assert 'sharedPassword: "x\\u0027+alert(1)+\\u0027x"' in body
+    assert 'caddyMode: "loc\\u0027al"' in body
+    assert "sharedPassword: '" not in body
+    assert "&#39;+alert" not in body
