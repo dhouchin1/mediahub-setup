@@ -265,7 +265,7 @@ def _run_install(install_dir: Path, settings: dict) -> None:
     ports = settings.get("ports", {})
     enabled = settings.get("enabled_services", [])
     core = services.core_keys() if roles.installs_arr(roles.normalize(settings.get("role"))) else []
-    all_to_poll = core + [k for k in enabled if k != "recyclarr"]
+    all_to_poll = core + [k for k in enabled if services.has_port(k)]
 
     service_urls: dict[str, str] = {}
     for key in all_to_poll:
@@ -322,7 +322,11 @@ def start_install(install_dir: Path, drive: dict, settings: dict) -> bool:
             if roles.installs_arr(roles.normalize(settings.get("role")))
             else []
         )
-        all_services = core + [k for k in enabled if k != "recyclarr"]
+        # Only services that expose a pollable port get a health slot.
+        # Anything without one (recyclarr is a CLI tool, gluetun is a
+        # network sidecar) can never become ready/timeout, so seeding it
+        # left the page at 'pending' forever and capped progress below 100%.
+        all_services = core + [k for k in enabled if services.has_port(k)]
         _install_state.update(
             {
                 "status": "running",

@@ -28,14 +28,10 @@ def _services_for_settings(settings: dict | None) -> list[dict]:
     out = list(CORE_SERVICES) if roles.installs_arr(_role(settings)) else []
     enabled = (settings or {}).get("enabled_services") or []
     for key in enabled:
-        if key == "recyclarr":
-            continue  # CLI tool, no port to poll
-        svc = services.ALL.get(key)
-        if not svc:
-            continue
-        out.append(
-            {"key": key, "label": svc.get("name", key), "port_key": svc.get("port_key") or key}
-        )
+        if not services.has_port(key):
+            continue  # no web port to poll (recyclarr CLI, gluetun sidecar)
+        svc = services.ALL[key]
+        out.append({"key": key, "label": svc.get("name", key), "port_key": svc["port_key"]})
     return out
 
 

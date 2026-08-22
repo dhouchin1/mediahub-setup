@@ -494,3 +494,18 @@ def test_start_install_records_compose_and_env_paths(tmp_path):
     assert status["compose_path"] == str(tmp_path / "docker-compose.yml")
     assert status["env_path"] == str(tmp_path / ".env")
     event.set()
+
+
+def test_start_install_skips_health_slot_for_portless_services(tmp_path):
+    """Regression: gluetun (no port_key) got a 'pending' slot that nothing
+    could ever flip to ready/timeout, so the install page showed it pending
+    forever and progress could never reach 100% during the health phase."""
+    installer._install_state["status"] = "idle"
+    settings = {**_settings_with_gluetun(), "enabled_services": ["gluetun", "recyclarr", "bazarr"]}
+    with patch.object(installer, "_run_install", side_effect=lambda *a, **k: None):
+        assert installer.start_install(tmp_path, SAMPLE_DRIVE, settings)
+    svc = installer.install_status()["services"]
+    assert "gluetun" not in svc
+    assert "recyclarr" not in svc
+    assert "bazarr" in svc
+    installer._install_state["status"] = "idle"

@@ -346,3 +346,12 @@ def test_install_status_tolerates_settings_without_ports(client):
     )
     r = client.get("/install/status")
     assert r.status_code == 200
+
+
+def test_install_service_list_omits_portless_services(client):
+    from mediahub_setup.routes.install import _services_for_settings
+
+    keys = [s["key"] for s in _services_for_settings({"enabled_services": ["gluetun", "bazarr"]})]
+    assert "gluetun" not in keys
+    assert "bazarr" in keys
+    assert "sonarr" in keys
