@@ -168,3 +168,37 @@ def test_initial_status_is_idle():
     """wiring_status() must report phase='idle' before start_wiring() is called."""
     status = wiring_runner.wiring_status()
     assert status["phase"] == "idle"
+
+
+# ---------------------------------------------------------------------------
+# _build_context — container vs host ports
+# ---------------------------------------------------------------------------
+
+
+def test_build_context_internal_urls_use_container_ports_not_host_ports():
+    """Regression: a user who moves Sonarr to host port 8990 (because 8989
+    is taken) still has Sonarr listening on 8989 *inside* the compose
+    network. The *_internal URLs handed to Prowlarr/Bazarr/Recyclarr were
+    built from the host port, so every cross-app call went to a port
+    nothing listened on — while the wizard reported green."""
+    state.set(
+        "settings",
+        {
+            "ports": {"sonarr": 8990, "radarr": 7879, "prowlarr": 9697, "bazarr": 6768},
+            "enabled_services": ["bazarr"],
+        },
+    )
+    ctx = wiring_runner._build_context()
+    assert ctx.sonarr_internal == "http://sonarr:8989"
+    assert ctx.radarr_internal == "http://radarr:7878"
+    assert ctx.prowlarr_internal == "http://prowlarr:9696"
+    assert ctx.bazarr_internal == "http://bazarr:6767"
+    # Host-side URLs still honour the user's override.
+    assert ctx.sonarr_url == "http://localhost:8990"
+    assert ctx.radarr_url == "http://localhost:7879"
+
+
+def test_build_context_jellyseerr_internal_uses_container_port():
+    """Jellyseerr's default host port is 5056 but it listens on 5055 inside."""
+    state.set("settings", {"ports": {"jellyseerr": 5056}})
+    assert wiring_runner._build_context().jellyseerr_internal == "http://jellyseerr:5055"

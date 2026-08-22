@@ -23,7 +23,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import roles, state
+from . import roles, services, state
 from .arr_client import (
     ProwlarrClient,
     QBittorrentClient,
@@ -353,7 +353,7 @@ def _wire_notifiarr_webhooks(ctx: WiringContext) -> str | None:
     wire_notifiarr_to_arr(
         sonarr=ctx.sonarr_client,
         radarr=ctx.radarr_client,
-        notifiarr_internal_url=f"http://notifiarr:{ctx.ports.get('notifiarr', 5454)}",
+        notifiarr_internal_url=_internal_url("notifiarr"),
     )
     return None
 
@@ -686,6 +686,12 @@ def _set_task(name: str, status: str, message: str = "") -> None:
                 return
 
 
+def _internal_url(key: str) -> str:
+    """``http://<container>:<container port>`` for a service on the compose
+    network — independent of whichever host port the user chose."""
+    return f"http://{key}:{services.ALL[key]['internal_port']}"
+
+
 def _build_context() -> WiringContext:
     settings = state.get("settings") or {}
     enabled = settings.get("enabled_services") or []
@@ -709,13 +715,16 @@ def _build_context() -> WiringContext:
         enabled=enabled,
         role=roles.current(),
         qb_host="gluetun" if "gluetun" in enabled else "qbittorrent",
-        sonarr_internal=f"http://sonarr:{sonarr_port}",
-        radarr_internal=f"http://radarr:{radarr_port}",
-        prowlarr_internal=f"http://prowlarr:{prowlarr_port}",
-        jellyfin_internal=f"http://jellyfin:{jellyfin_port}",
-        overseerr_internal=f"http://overseerr:{overseerr_port}",
-        jellyseerr_internal=f"http://jellyseerr:{jellyseerr_port}",
-        bazarr_internal=f"http://bazarr:{bazarr_port}",
+        # Container-to-container URLs use the *container* port, which is
+        # fixed by the compose template (e.g. "{{ ports.sonarr }}:8989").
+        # The host-side port the user picked only applies to localhost.
+        sonarr_internal=_internal_url("sonarr"),
+        radarr_internal=_internal_url("radarr"),
+        prowlarr_internal=_internal_url("prowlarr"),
+        jellyfin_internal=_internal_url("jellyfin"),
+        overseerr_internal=_internal_url("overseerr"),
+        jellyseerr_internal=_internal_url("jellyseerr"),
+        bazarr_internal=_internal_url("bazarr"),
         qb_url=f"http://localhost:{qb_port}",
         sonarr_url=f"http://localhost:{sonarr_port}",
         radarr_url=f"http://localhost:{radarr_port}",
