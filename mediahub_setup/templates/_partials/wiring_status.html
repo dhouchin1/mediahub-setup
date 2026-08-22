@@ -122,6 +122,11 @@
         </a>
 
       {% elif any_failed %}
+        {% if error %}
+        <!-- The run died outside any single task (e.g. while building the
+             context) — this message is the only diagnostic the user gets. -->
+        <div class="w-full text-sm text-rose-300 mb-3 break-all">{{ error }}</div>
+        {% endif %}
         <!-- Failed: Retry -->
         <button hx-post="{{ url_for('wiring.start') }}"
                 hx-target="#wiring-status"

@@ -24,6 +24,7 @@ def index():
         step="wiring",
         task_names=wiring_runner.planned_task_names(),
         phase=status["phase"],
+        error=status["error"],
         tasks=status["tasks"],
     )
 
@@ -37,6 +38,7 @@ def start() -> FlaskResponse:
         "_partials/wiring_status.html",
         tasks=status["tasks"],
         phase=status["phase"],
+        error=status["error"],
     )
     return FlaskResponse(partial, status=202)
 
@@ -49,4 +51,5 @@ def poll_status() -> str:
         "_partials/wiring_status.html",
         tasks=status["tasks"],
         phase=status["phase"],
+        error=status["error"],
     )

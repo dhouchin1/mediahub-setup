@@ -355,3 +355,15 @@ def test_install_service_list_omits_portless_services(client):
     assert "gluetun" not in keys
     assert "bazarr" in keys
     assert "sonarr" in keys
+
+
+def test_wiring_status_partial_shows_run_level_error(client):
+    from unittest.mock import patch
+
+    from mediahub_setup import wiring_runner
+
+    failed = {"phase": "failed", "tasks": [], "error": "context exploded <badly>"}
+    with patch.object(wiring_runner, "wiring_status", return_value=failed):
+        r = client.get("/wiring/status")
+    assert r.status_code == 200
+    assert b"context exploded &lt;badly&gt;" in r.data
