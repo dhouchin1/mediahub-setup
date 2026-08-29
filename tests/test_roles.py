@@ -72,18 +72,20 @@ def test_forces_syncthing():
     assert roles.forces_syncthing(roles.ALL_IN_ONE) is False
 
 
-def test_receiver_flow_drops_wiring_step():
+def test_receiver_flow_keeps_wiring_step():
+    # The receiver's wiring plan carries the Syncthing tasks (receive-only
+    # folder + forced versioning) — the wizard must run them, like headless.
     keys = [k for k, _ in roles.steps_for(roles.RECEIVER)]
-    assert keys == ["welcome", "preflight", "drive", "settings", "install", "done"]
-    assert "wiring" not in keys
+    assert keys == ["welcome", "preflight", "drive", "settings", "install", "wiring", "done"]
 
 
 def test_full_flows_have_seven_steps():
     assert len(roles.steps_for(roles.ALL_IN_ONE)) == 7
     assert len(roles.steps_for(roles.SEEDBOX)) == 7
+    assert len(roles.steps_for(roles.RECEIVER)) == 7
 
 
 def test_has_step():
     assert roles.has_step(roles.ALL_IN_ONE, "wiring") is True
-    assert roles.has_step(roles.RECEIVER, "wiring") is False
+    assert roles.has_step(roles.RECEIVER, "wiring") is True
     assert roles.has_step(roles.RECEIVER, "drive") is True

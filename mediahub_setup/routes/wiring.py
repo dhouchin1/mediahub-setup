@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, redirect, render_template, url_for
+from flask import Blueprint, render_template
 from flask import Response as FlaskResponse
 
-from .. import roles, wiring_runner
+from .. import wiring_runner
 
 bp = Blueprint("wiring", __name__, url_prefix="/wiring")
 
@@ -14,10 +14,11 @@ bp = Blueprint("wiring", __name__, url_prefix="/wiring")
 def index():
     """Ready screen — shows task checklist before user clicks Start.
 
-    The receiver role has no *arr stack to wire, so it skips straight to Done.
+    Every role goes through wiring: the receiver has no *arr stack, but its
+    task plan still carries the Syncthing steps (receive-only folder, forced
+    versioning, device pairing) — skipping to Done left a wizard-installed
+    receiver entirely unconfigured, while the headless path wired it fine.
     """
-    if roles.current() == roles.RECEIVER:
-        return redirect(url_for("done.index"))
     status = wiring_runner.wiring_status()
     return render_template(
         "wiring.html",
