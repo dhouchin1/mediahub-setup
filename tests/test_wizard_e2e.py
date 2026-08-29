@@ -27,6 +27,24 @@ def client():
     state.clear()
 
 
+def test_cross_origin_post_rejected(client):
+    """A hostile page's drive-by form POST (mismatched Origin) gets a 403."""
+    r = client.post("/role", data={"role": "seedbox"}, headers={"Origin": "http://evil.example"})
+    assert r.status_code == 403
+    assert state.get("role") is None
+
+
+def test_null_origin_post_rejected(client):
+    r = client.post("/role", data={"role": "seedbox"}, headers={"Origin": "null"})
+    assert r.status_code == 403
+
+
+def test_same_origin_post_allowed(client):
+    r = client.post("/role", data={"role": "seedbox"}, headers={"Origin": "http://localhost"})
+    assert r.status_code == 303
+    assert state.get("role") == "seedbox"
+
+
 def test_welcome_renders(client):
     r = client.get("/")
     assert r.status_code == 200
