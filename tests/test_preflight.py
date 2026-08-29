@@ -94,6 +94,18 @@ def test_check_tailscale_warns_when_logged_out(monkeypatch):
     assert r.status == "warn"
 
 
+def test_port_free_detects_loopback_only_listener():
+    """A loopback-bound service must count as busy (BSD SO_REUSEADDR trap)."""
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as srv:
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        port = srv.getsockname()[1]
+        assert preflight._port_free(port) is False
+    assert preflight._port_free(port) is True
+
+
 def test_run_all_appends_tailscale_only_for_seedbox(monkeypatch):
     stub = lambda name: lambda: preflight.CheckResult(name, "pass", "ok")  # noqa: E731
     for fn, nm in [
