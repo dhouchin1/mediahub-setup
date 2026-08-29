@@ -126,9 +126,14 @@ def check_docker_compose() -> CheckResult:
 
 
 def _port_free(port: int) -> bool:
-    """True if a process can bind 0.0.0.0:port right now."""
+    """True if a process can bind 0.0.0.0:port right now.
+
+    Deliberately NO SO_REUSEADDR: on macOS/BSD it lets the wildcard bind
+    succeed even while another process holds 127.0.0.1:<port> (e.g. a native
+    Sonarr or Homebrew qBittorrent bound to loopback), which reported the
+    port as free and let docker compose fail later with address-in-use.
+    """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             s.bind(("0.0.0.0", port))
         except OSError:

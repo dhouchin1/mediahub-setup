@@ -124,6 +124,19 @@ def test_validate_rejects_out_of_range_port():
     assert "port_sonarr" in errs
 
 
+def test_caddy_mode_case_normalised():
+    s = build_settings("seedbox", {"caddy": {"mode": "Public"}})
+    assert s["caddy_mode"] == s["caddy"]["mode"] == "public"
+    assert "caddy_mode" not in validate_settings(s)
+
+
+def test_validate_rejects_unknown_caddy_mode():
+    # An unknown mode makes compose and the Caddyfile renderer disagree on
+    # the fallback: nothing publishes a port and the stack is unreachable.
+    with pytest.raises(SettingsError, match="caddy_mode"):
+        build_settings("seedbox", {"caddy": {"mode": "https"}})
+
+
 def test_role_aliases_normalise():
     assert build_settings("vps", {})["role"] == roles.SEEDBOX
     assert build_settings("home", {})["role"] == roles.RECEIVER
