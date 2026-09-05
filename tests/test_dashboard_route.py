@@ -64,6 +64,21 @@ def test_dashboard_logs_returns_400_for_invalid_name(client):
     assert r.status_code == 400
 
 
+def test_dashboard_logs_returns_400_for_non_numeric_tail(client):
+    """GET /dashboard/logs with tail=abc must return 400, not 500."""
+    r = client.get("/dashboard/logs?name=mediahub-sonarr&tail=abc")
+    assert r.status_code == 400
+
+
+def test_dashboard_logs_clamps_extreme_tail(client):
+    """Huge or negative tail values are clamped before reaching docker logs."""
+    with patch("mediahub_setup.docker_ops.container_logs", return_value="ok") as logs:
+        client.get("/dashboard/logs?name=mediahub-sonarr&tail=99999999")
+        client.get("/dashboard/logs?name=mediahub-sonarr&tail=-5")
+    tails = [call.kwargs.get("tail") for call in logs.call_args_list]
+    assert tails == [2000, 1]
+
+
 def test_dashboard_update_all_kicks_off_update(client):
     """POST /dashboard/update-all must return 200 and the update partial."""
     with patch("mediahub_setup.docker_ops.compose_update_all", return_value=True):
