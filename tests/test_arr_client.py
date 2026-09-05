@@ -151,7 +151,7 @@ class TestQBittorrentClient:
         """Passwords with quotes/backslashes must still produce valid JSON."""
         import json as json_mod
 
-        tricky = 'pa"ss\\wo\'rd'
+        tricky = "pa\"ss\\wo'rd"
         mock_post = MagicMock(return_value=_text_response(""))
         with patch.object(self.qb._session, "post", mock_post):
             self.qb.change_password(tricky)

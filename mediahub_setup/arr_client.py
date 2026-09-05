@@ -112,9 +112,7 @@ class QBittorrentClient:
         resp = self._session.post(
             f"{self.base_url}/api/v2/app/setPreferences",
             data={
-                "json": json.dumps(
-                    {"web_ui_username": username, "web_ui_password": new_password}
-                )
+                "json": json.dumps({"web_ui_username": username, "web_ui_password": new_password})
             },
             timeout=15,
         )

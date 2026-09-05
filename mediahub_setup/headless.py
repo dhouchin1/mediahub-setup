@@ -120,9 +120,7 @@ def _run_install(
     """Render compose/.env, start docker compose, and poll until ready."""
     role = settings["role"]
     install_dir = installer.prepare_install_dir()
-    installer.prepare_media_layout(
-        drive["mount_path"], include_torrents=roles.installs_arr(role)
-    )
+    installer.prepare_media_layout(drive["mount_path"], include_torrents=roles.installs_arr(role))
     compose_path = installer.render_compose(install_dir, settings)
     installer.render_env(install_dir, drive, settings)
     _echo(f"• Wrote {compose_path}")
