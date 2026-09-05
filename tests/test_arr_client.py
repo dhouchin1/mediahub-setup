@@ -147,6 +147,17 @@ class TestQBittorrentClient:
         call_args = mock_post.call_args
         assert "setPreferences" in call_args[0][0]
 
+    def test_change_password_survives_quotes_in_password(self):
+        """Passwords with quotes/backslashes must still produce valid JSON."""
+        import json as json_mod
+
+        tricky = "pa\"ss\\wo'rd"
+        mock_post = MagicMock(return_value=_text_response(""))
+        with patch.object(self.qb._session, "post", mock_post):
+            self.qb.change_password(tricky)
+        payload = json_mod.loads(mock_post.call_args.kwargs["data"]["json"])
+        assert payload["web_ui_password"] == tricky
+
     def test_list_categories_returns_dict(self):
         categories = {"movies": {"savePath": "/data/torrents/movies"}, "tv": {}}
         with patch.object(self.qb._session, "get", return_value=_ok_response(categories)):

@@ -253,6 +253,12 @@ def test_render_env_creates_file(tmp_path):
     assert out.name == ".env"
 
 
+def test_render_env_is_owner_only(tmp_path):
+    """The .env holds VPN keys and passwords — must not be world-readable."""
+    out = installer.render_env(tmp_path, SAMPLE_DRIVE, SAMPLE_SETTINGS)
+    assert (out.stat().st_mode & 0o777) == 0o600
+
+
 def test_render_env_contains_puid(tmp_path):
     out = installer.render_env(tmp_path, SAMPLE_DRIVE, SAMPLE_SETTINGS)
     assert "PUID=501" in out.read_text()

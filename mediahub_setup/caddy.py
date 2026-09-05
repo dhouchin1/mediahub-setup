@@ -109,7 +109,8 @@ def _render_local(
         "",
         "# IP allowlist — loopback + RFC1918 + 100.64.0.0/10 (Tailscale)",
         "(local_only) {",
-        "    @blocked not remote_ip 127.0.0.0/8 100.64.0.0/10 192.168.0.0/16 10.0.0.0/8",
+        "    @blocked not remote_ip 127.0.0.0/8 100.64.0.0/10"
+        " 192.168.0.0/16 172.16.0.0/12 10.0.0.0/8",
         "    abort @blocked",
         "}",
         "",

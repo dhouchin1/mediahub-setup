@@ -164,3 +164,23 @@ def test_check_file_sharing_warns_when_drive_missing_from_container(monkeypatch)
     result = preflight.check_file_sharing()
     assert result.status == "warn"
     assert result.fix is not None
+
+
+def test_required_ports_match_stack_defaults():
+    """Preflight must probe the ports the stack actually publishes.
+
+    Regression: qBittorrent was probed on 8080 while DEFAULT_PORTS (and the
+    compose template) publish 8090, so a busy 8090 passed preflight and then
+    failed the install at docker compose up.
+    """
+    from mediahub_setup.system_settings import DEFAULT_PORTS
+
+    probed = {port for port, _label in preflight.REQUIRED_PORTS}
+    expected = {
+        DEFAULT_PORTS["sonarr"],
+        DEFAULT_PORTS["radarr"],
+        DEFAULT_PORTS["prowlarr"],
+        DEFAULT_PORTS["qbittorrent_web"],
+        DEFAULT_PORTS["qbittorrent_bt"],
+    }
+    assert probed == expected
