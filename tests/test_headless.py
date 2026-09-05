@@ -79,6 +79,14 @@ def test_load_config_rejects_non_mapping(tmp_path):
         headless.load_config(p)
 
 
+def test_load_config_malformed_yaml_raises_value_error(tmp_path):
+    """Broken YAML must surface as ValueError (mapped to EXIT_CONFIG), not a traceback."""
+    p = tmp_path / "bad.yml"
+    p.write_text('role: "seedbox\ndata_dir: [unclosed\n')
+    with pytest.raises(ValueError, match="Invalid YAML"):
+        headless.load_config(p)
+
+
 def test_load_config_missing_file(tmp_path):
     with pytest.raises(FileNotFoundError):
         headless.load_config(tmp_path / "nope.yml")
