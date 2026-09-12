@@ -224,3 +224,13 @@ def test_cli_help_lists_install_command():
     assert result.exit_code == 0
     assert "install" in result.output
     assert "serve" in result.output
+
+
+def test_run_uncreatable_data_dir_returns_drive_error(tmp_path, monkeypatch):
+    # A plain file at data_dir makes mkdir raise; that must surface as
+    # EXIT_DRIVE per the module's exit-code contract, not a traceback.
+    _mock_preflight(monkeypatch)
+    blocker = tmp_path / "not-a-dir"
+    blocker.write_text("i am a file")
+    rc = headless.run(role="seedbox", data_dir=str(blocker / "media"), poll_interval=0)
+    assert rc == headless.EXIT_DRIVE
