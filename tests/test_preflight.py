@@ -129,7 +129,9 @@ def test_check_file_sharing_passes_when_all_drives_visible(monkeypatch):
     # Mirror check_file_sharing's own filter (it ignores the boot volume), so
     # the test skips cleanly on a Mac with no external drive mounted.
     host_entries = [
-        e for e in os.listdir("/Volumes") if not e.startswith(".") and e != "Macintosh HD"
+        e
+        for e in os.listdir("/Volumes")
+        if not e.startswith(".") and not os.path.islink(os.path.join("/Volumes", e))
     ]
     container_listing = "\n".join(host_entries) + "\n"
 
@@ -150,7 +152,9 @@ def test_check_file_sharing_warns_when_drive_missing_from_container(monkeypatch)
     # Mirror check_file_sharing's own filter (it ignores the boot volume), so
     # the test skips cleanly on a Mac with no external drive mounted.
     host_entries = [
-        e for e in os.listdir("/Volumes") if not e.startswith(".") and e != "Macintosh HD"
+        e
+        for e in os.listdir("/Volumes")
+        if not e.startswith(".") and not os.path.islink(os.path.join("/Volumes", e))
     ]
     if not host_entries:
         # Nothing to compare against on this machine — skip cleanly

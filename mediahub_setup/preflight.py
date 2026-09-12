@@ -187,10 +187,15 @@ def check_file_sharing() -> CheckResult:
             message="Bind mounts are native on this platform",
         )
 
-    # What does the host see at /Volumes? Filter out hidden dotfiles.
+    # What does the host see at /Volumes? Filter out hidden dotfiles and
+    # symlinks — the boot volume appears as a symlink to / whose name is
+    # whatever the user called their startup disk, not always "Macintosh HD",
+    # and it is never something Docker needs to share.
     try:
         host_entries = sorted(
-            e for e in os.listdir("/Volumes") if not e.startswith(".") and e != "Macintosh HD"
+            e
+            for e in os.listdir("/Volumes")
+            if not e.startswith(".") and not os.path.islink(os.path.join("/Volumes", e))
         )
     except OSError:
         return CheckResult(
