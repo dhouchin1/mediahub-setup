@@ -127,3 +127,19 @@ def test_validate_rejects_out_of_range_port():
 def test_role_aliases_normalise():
     assert build_settings("vps", {})["role"] == roles.SEEDBOX
     assert build_settings("home", {})["role"] == roles.RECEIVER
+
+
+def test_unknown_config_role_raises_instead_of_failing_open():
+    # A typo'd role in a headless YAML must never silently become all_in_one:
+    # all_in_one publishes the web UIs on 0.0.0.0, which on a public VPS is
+    # exactly the wrong default to fall open to.
+    with pytest.raises(SettingsError) as exc:
+        build_settings(None, {"role": "seed-box "})
+    assert "role" in exc.value.errors
+
+    with pytest.raises(SettingsError):
+        build_settings(None, {"role": True})
+
+
+def test_absent_role_still_defaults_to_all_in_one():
+    assert build_settings(None, {})["role"] == roles.ALL_IN_ONE

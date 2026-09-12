@@ -70,7 +70,11 @@ def build_settings(role: str | None, cfg: dict[str, Any] | None = None) -> dict[
     Raises :class:`SettingsError` if the resolved settings fail validation.
     """
     cfg = dict(cfg or {})
-    role = roles.normalize(role or cfg.get("role"))
+    raw_role = role or cfg.get("role")
+    try:
+        role = roles.normalize_strict(str(raw_role) if raw_role is not None else None)
+    except ValueError as exc:
+        raise SettingsError({"role": str(exc)}) from exc
 
     tz = str(cfg.get("timezone") or cfg.get("tz") or detect_tz()).strip() or "UTC"
     puid = _coerce_int(cfg.get("puid", detect_uid()), detect_uid())

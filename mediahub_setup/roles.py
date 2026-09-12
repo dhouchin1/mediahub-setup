@@ -53,12 +53,30 @@ _ALIASES: dict[str, str] = {
 
 def normalize(value: str | None) -> str:
     """Coerce arbitrary input to a canonical role, defaulting to all-in-one."""
+    try:
+        return normalize_strict(value)
+    except ValueError:
+        return ALL_IN_ONE
+
+
+def normalize_strict(value: str | None) -> str:
+    """Like :func:`normalize`, but raise ``ValueError`` on an unrecognised value.
+
+    An empty/absent value still defaults to all-in-one; only a *present* string
+    that matches no role or alias errors. Config-file paths must use this —
+    falling open to all-in-one silently unpins the seedbox web UIs from
+    loopback on a public VPS, which is exactly the wrong failure mode for a
+    typo like ``role: seed-box``.
+    """
     if not value:
         return ALL_IN_ONE
     v = value.strip().lower().replace("-", "_").replace(" ", "_")
     if v in VALID:
         return v
-    return _ALIASES.get(v.replace("_", ""), _ALIASES.get(v, ALL_IN_ONE))
+    alias = _ALIASES.get(v.replace("_", "")) or _ALIASES.get(v)
+    if alias:
+        return alias
+    raise ValueError(f"Unknown role {value!r} — expected one of: {', '.join(VALID)}")
 
 
 def current() -> str:

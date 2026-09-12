@@ -87,3 +87,20 @@ def test_has_step():
     assert roles.has_step(roles.ALL_IN_ONE, "wiring") is True
     assert roles.has_step(roles.RECEIVER, "wiring") is False
     assert roles.has_step(roles.RECEIVER, "drive") is True
+
+
+def test_normalize_strict_accepts_valid_and_aliases():
+    assert roles.normalize_strict("seedbox") == roles.SEEDBOX
+    assert roles.normalize_strict("all-in-one") == roles.ALL_IN_ONE
+    assert roles.normalize_strict("vps") == roles.SEEDBOX
+    assert roles.normalize_strict(None) == roles.ALL_IN_ONE
+    assert roles.normalize_strict("") == roles.ALL_IN_ONE
+
+
+def test_normalize_strict_raises_on_unknown():
+    import pytest
+
+    with pytest.raises(ValueError):
+        roles.normalize_strict("seed-boxx")
+    # the lenient normalize keeps its fail-open contract for wizard defaults
+    assert roles.normalize("seed-boxx") == roles.ALL_IN_ONE
