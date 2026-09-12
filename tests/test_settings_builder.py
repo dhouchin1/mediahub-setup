@@ -143,3 +143,12 @@ def test_unknown_config_role_raises_instead_of_failing_open():
 
 def test_absent_role_still_defaults_to_all_in_one():
     assert build_settings(None, {})["role"] == roles.ALL_IN_ONE
+
+
+def test_non_list_services_raises():
+    # `services: caddy` (a bare string) used to iterate characters and
+    # silently enable nothing; scalars raised an uncaught TypeError.
+    for bad in ("caddy", 3, {"caddy": True}):
+        with pytest.raises(SettingsError) as exc:
+            build_settings("seedbox", {"services": bad})
+        assert "services" in exc.value.errors

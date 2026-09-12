@@ -98,6 +98,12 @@ def build_settings(role: str | None, cfg: dict[str, Any] | None = None) -> dict[
     requested = cfg.get("services")
     if requested is None:
         raw_enabled = ["caddy"] if role == roles.SEEDBOX else []
+    elif not isinstance(requested, list):
+        # `services: caddy` (a plain string) would otherwise iterate its
+        # characters and silently install zero optional services.
+        raise SettingsError(
+            {"services": f"Must be a list of service names, got {type(requested).__name__}."}
+        )
     else:
         raw_enabled = [str(s) for s in requested if str(s) in allowed]
     if roles.forces_syncthing(role):
