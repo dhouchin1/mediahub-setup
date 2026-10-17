@@ -22,7 +22,7 @@ REQUIRED_PORTS: tuple[tuple[int, str], ...] = (
     (7878, "Radarr"),
     (8989, "Sonarr"),
     (9696, "Prowlarr"),
-    (8080, "qBittorrent Web UI"),
+    (8090, "qBittorrent Web UI"),
     (6881, "qBittorrent (BitTorrent)"),
 )
 

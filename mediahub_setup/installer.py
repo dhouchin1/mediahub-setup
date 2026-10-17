@@ -167,6 +167,8 @@ def render_env(install_dir: Path, drive: dict, settings: dict) -> Path:
     ]
     out = install_dir / ".env"
     install_dir.mkdir(parents=True, exist_ok=True)
+    out.touch(mode=0o600, exist_ok=True)
+    out.chmod(0o600)  # holds VPN private key, qBittorrent password, API keys
     out.write_text("\n".join(lines) + "\n")
     return out
 

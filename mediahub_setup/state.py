@@ -29,6 +29,8 @@ def _load() -> None:
 
 def _save() -> None:
     try:
+        _STATE_PATH.touch(mode=0o600, exist_ok=True)
+        _STATE_PATH.chmod(0o600)  # holds shared_password, VPN keys, API keys
         _STATE_PATH.write_text(json.dumps(_state, indent=2))
     except OSError:
         pass  # non-fatal — state will just not persist across runs

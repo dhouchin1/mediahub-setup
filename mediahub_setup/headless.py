@@ -57,7 +57,13 @@ def load_config(path: str | Path) -> dict[str, Any]:
     else:
         import yaml
 
-        data = yaml.safe_load(text) or {}
+        try:
+            data = yaml.safe_load(text) or {}
+        except yaml.YAMLError as exc:
+            # Normalize to ValueError so run() maps this to EXIT_CONFIG
+            # instead of dying with a traceback (the documented contract is
+            # that provisioning scripts can branch on the exit code).
+            raise ValueError(f"Invalid YAML in {p}: {exc}") from exc
     if not isinstance(data, dict):
         raise ValueError(f"Config root must be a mapping, got {type(data).__name__}")
     return data
@@ -114,9 +120,7 @@ def _run_install(
     """Render compose/.env, start docker compose, and poll until ready."""
     role = settings["role"]
     install_dir = installer.prepare_install_dir()
-    installer.prepare_media_layout(
-        drive["mount_path"], include_torrents=roles.installs_arr(role)
-    )
+    installer.prepare_media_layout(drive["mount_path"], include_torrents=roles.installs_arr(role))
     compose_path = installer.render_compose(install_dir, settings)
     installer.render_env(install_dir, drive, settings)
     _echo(f"• Wrote {compose_path}")
