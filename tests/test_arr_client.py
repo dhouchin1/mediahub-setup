@@ -53,7 +53,7 @@ def _text_response(text: str, status: int = 200) -> MagicMock:
 
 class TestGetQbittorrentTempPassword:
     def test_extracts_password_from_stdout(self):
-        proc = MagicMock()
+        proc = MagicMock(returncode=0)
         proc.stdout = "A temporary password is provided for this session: xK9mPqR2\n"
         proc.stderr = ""
         with patch("subprocess.run", return_value=proc):
@@ -61,15 +61,36 @@ class TestGetQbittorrentTempPassword:
         assert pw == "xK9mPqR2"
 
     def test_extracts_password_from_stderr(self):
-        proc = MagicMock()
+        proc = MagicMock(returncode=0)
         proc.stdout = ""
         proc.stderr = "WebUI: temporary password for this session: AbCdEfGh\n"
         with patch("subprocess.run", return_value=proc):
             pw = get_qbittorrent_temp_password("mediahub-qbittorrent")
         assert pw == "AbCdEfGh"
 
+    def test_takes_last_password_after_restart(self):
+        # docker logs retains every boot; only the newest password is valid.
+        proc = MagicMock(returncode=0)
+        proc.stdout = (
+            "A temporary password is provided for this session: oldBoot1\n"
+            "Starting qBittorrent...\n"
+            "A temporary password is provided for this session: newBoot2\n"
+        )
+        proc.stderr = ""
+        with patch("subprocess.run", return_value=proc):
+            pw = get_qbittorrent_temp_password("mediahub-qbittorrent")
+        assert pw == "newBoot2"
+
+    def test_raises_when_docker_logs_fails(self):
+        proc = MagicMock(returncode=1)
+        proc.stdout = ""
+        proc.stderr = "Error: No such container: mediahub-qbittorrent\n"
+        with patch("subprocess.run", return_value=proc):
+            with pytest.raises(RuntimeError, match="docker logs failed"):
+                get_qbittorrent_temp_password("mediahub-qbittorrent")
+
     def test_raises_when_not_found(self):
-        proc = MagicMock()
+        proc = MagicMock(returncode=0)
         proc.stdout = "Starting qBittorrent...\n"
         proc.stderr = ""
         with patch("subprocess.run", return_value=proc):

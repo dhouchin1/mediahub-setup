@@ -27,6 +27,24 @@ def client():
     state.clear()
 
 
+def test_cross_origin_post_rejected(client):
+    """A hostile page's drive-by form POST (mismatched Origin) gets a 403."""
+    r = client.post("/role", data={"role": "seedbox"}, headers={"Origin": "http://evil.example"})
+    assert r.status_code == 403
+    assert state.get("role") is None
+
+
+def test_null_origin_post_rejected(client):
+    r = client.post("/role", data={"role": "seedbox"}, headers={"Origin": "null"})
+    assert r.status_code == 403
+
+
+def test_same_origin_post_allowed(client):
+    r = client.post("/role", data={"role": "seedbox"}, headers={"Origin": "http://localhost"})
+    assert r.status_code == 303
+    assert state.get("role") == "seedbox"
+
+
 def test_welcome_renders(client):
     r = client.get("/")
     assert r.status_code == 200
@@ -46,12 +64,14 @@ def test_choose_role_persists_and_advances_to_preflight(client):
     assert state.get("role") == "seedbox"
 
 
-def test_receiver_skips_wiring_step(client):
-    """The receiver has no *arr to wire, so /wiring/ redirects to Done."""
+def test_receiver_gets_wiring_step_with_syncthing_tasks(client):
+    """The receiver wires Syncthing (receive-only folder) via the wizard too."""
     state.set("role", "receiver")
+    state.set("settings", {"role": "receiver", "enabled_services": ["syncthing"]})
     r = client.get("/wiring/")
-    assert r.status_code in (301, 302, 303, 308)
-    assert "/done" in r.headers["Location"]
+    assert r.status_code == 200
+    body = r.data.decode()
+    assert "Syncthing" in body
 
 
 def test_receiver_settings_show_syncthing_and_hide_qbittorrent(client):

@@ -103,7 +103,7 @@ def build_settings(role: str | None, cfg: dict[str, Any] | None = None) -> dict[
     caddy_cfg = cfg.get("caddy") or {}
     caddy = {
         "domain": str(caddy_cfg.get("domain", "mediahub.local")).strip() or "mediahub.local",
-        "mode": str(caddy_cfg.get("mode", "local")).strip() or "local",
+        "mode": str(caddy_cfg.get("mode", "local")).strip().lower() or "local",
     }
 
     syncthing_cfg = cfg.get("syncthing") or {}
@@ -201,6 +201,13 @@ def validate_settings(settings: dict[str, Any]) -> dict[str, str]:
                 errors[f"port_{key}"] = "Port must be between 1 and 65535."
         except (TypeError, ValueError):
             errors[f"port_{key}"] = "Must be a valid port number."
+
+    # An unknown caddy mode is worse than invalid — the compose template and
+    # the Caddyfile renderer disagree on the fallback, so every port ends up
+    # unpublished and the whole stack comes up unreachable. Reject it early.
+    mode = str(settings.get("caddy_mode", "local"))
+    if mode not in ("local", "public"):
+        errors["caddy_mode"] = "Caddy mode must be 'local' or 'public'."
 
     if "gluetun" in (settings.get("enabled_services") or []):
         g = settings.get("gluetun") or {}

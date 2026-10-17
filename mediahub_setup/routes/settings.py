@@ -193,6 +193,14 @@ def submit():
     gluetun_cfg = _parse_gluetun(f)
     retention_cfg = _parse_retention(f)
 
+    # The form uses a <select>, so anything but the two literals is a crafted
+    # POST or a stale saved value. Coerce to 'local' — an unknown mode makes
+    # the compose template and the Caddyfile renderer disagree and the whole
+    # stack comes up with no published ports.
+    caddy_mode = (f.get("caddy_mode", "local").strip() or "local").lower()
+    if caddy_mode not in ("local", "public"):
+        caddy_mode = "local"
+
     # Rebuild a form dict for re-rendering on error
     port_overrides: dict[str, int | str] = {}
     for svc in DEFAULT_PORTS:
@@ -245,7 +253,7 @@ def submit():
                 },
                 caddy={
                     "domain": f.get("caddy_domain", "mediahub.local").strip(),
-                    "mode": f.get("caddy_mode", "local").strip() or "local",
+                    "mode": caddy_mode,
                 },
                 syncthing={
                     "folder_label": f.get("syncthing_folder_label", "").strip(),
@@ -302,9 +310,9 @@ def submit():
             },
             "caddy": {
                 "domain": f.get("caddy_domain", "mediahub.local").strip(),
-                "mode": f.get("caddy_mode", "local").strip() or "local",
+                "mode": caddy_mode,
             },
-            "caddy_mode": f.get("caddy_mode", "local").strip() or "local",
+            "caddy_mode": caddy_mode,
             "syncthing": {
                 "folder_label": f.get("syncthing_folder_label", "").strip() or "MediaHub Library",
                 "folder_id": f.get("syncthing_folder_id", "").strip() or "mediahub-media",

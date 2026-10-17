@@ -31,16 +31,22 @@ def get_qbittorrent_temp_password(container_name: str) -> str:
         text=True,
         timeout=10,
     )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"docker logs failed for {container_name!r}: {result.stderr.strip()}"
+        )
     # The log line looks like:
     #   A temporary password is provided for this session: AbCdEfGh
+    # qBittorrent mints a NEW temporary password on every start and docker
+    # logs retain all prior boots, so only the LAST match is still valid.
     output = result.stdout + result.stderr
-    match = re.search(
+    matches = re.findall(
         r"temporary password[^:]*:\s*(\S+)",
         output,
         re.IGNORECASE,
     )
-    if match:
-        return match.group(1)
+    if matches:
+        return matches[-1]
     raise RuntimeError(
         f"Could not find temporary password in logs for {container_name!r}.\n"
         "Ensure the container is running and has finished its first-boot init."

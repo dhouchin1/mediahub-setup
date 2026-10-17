@@ -109,14 +109,13 @@ _STEPS_FULL: list[tuple[str, str]] = [
     ("wiring", "Wire-up"),
     ("done", "Done"),
 ]
-# The receiver has no *arr to wire, so the Wire-up step is dropped.
-_STEPS_RECEIVER: list[tuple[str, str]] = [step for step in _STEPS_FULL if step[0] != "wiring"]
+# Every role keeps the Wire-up step: the receiver has no *arr stack, but its
+# wiring plan still carries the Syncthing tasks (receive-only folder, forced
+# versioning), which the wizard must run just like the headless path does.
 
 
 def steps_for(role: str) -> list[tuple[str, str]]:
     """The wizard step list for the given role."""
-    if role == RECEIVER:
-        return list(_STEPS_RECEIVER)
     return list(_STEPS_FULL)
 
 
