@@ -269,7 +269,14 @@ def run(
     state.set("role", role)
 
     # --- drive -------------------------------------------------------------
-    drive_info = _resolve_drive(data_dir, cfg)
+    try:
+        drive_info = _resolve_drive(data_dir, cfg)
+    except OSError as exc:
+        # e.g. read-only mount, permission denied, or a plain file at the
+        # path — must map to EXIT_DRIVE, not an unhandled traceback, so
+        # provisioning scripts can branch on the documented exit codes.
+        _echo(f"✘ Cannot create data directory: {exc}")
+        return EXIT_DRIVE
     if drive_info is None:
         _echo("✘ No data directory. Pass --data-dir or set 'data_dir' in the config.")
         return EXIT_DRIVE

@@ -124,3 +124,21 @@ def test_set_sonarr_posts_correct_payload():
     assert payload["sonarr"]["port"] == 8989
     assert payload["sonarr"]["apikey"] == "sonarrkey123"
     assert payload["general"]["use_sonarr"] is True
+
+
+def test_read_bazarr_api_key_tolerates_percent_in_values():
+    """A bare '%' elsewhere in config.ini (provider password, post-processing
+    command) must not break API-key extraction via interpolation errors."""
+    ini = _SAMPLE_CONFIG_INI + textwrap.dedent(
+        """\
+
+        [addic7ed]
+        password = p%ssw0rd%%
+
+        [postprocessing]
+        command = /scripts/pp.sh --progress 50%
+        """
+    )
+    with patch("subprocess.run", return_value=_proc(returncode=0, stdout=ini)):
+        key = read_bazarr_api_key("mediahub-bazarr", timeout=10)
+    assert key == "bazarr_api_key_xyz_123"

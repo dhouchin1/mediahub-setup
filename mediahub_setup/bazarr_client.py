@@ -41,7 +41,11 @@ def read_bazarr_api_key(container_name: str, timeout: int = 120) -> str:
             if result.returncode != 0:
                 raise RuntimeError(result.stderr.strip() or "non-zero exit from docker exec")
 
-            parser = configparser.ConfigParser()
+            # interpolation=None: Bazarr's config.ini holds values we don't
+            # control (provider passwords, post-processing commands); a bare
+            # '%' in any of them would raise InterpolationSyntaxError and
+            # burn the whole retry window on a parse error.
+            parser = configparser.ConfigParser(interpolation=None)
             parser.read_string(result.stdout)
             if "auth" in parser and parser["auth"].get("apikey"):
                 return parser["auth"]["apikey"].strip()

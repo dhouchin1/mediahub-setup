@@ -142,7 +142,9 @@ def status():
             },
         )
 
-    ports = settings["ports"] if settings else {}
+    # .get like every sibling call site — this endpoint polls every ~2s, so a
+    # hand-edited/older state file missing 'ports' would loop 500s forever.
+    ports = (settings.get("ports") or {}) if settings else {}
     svc_list = _services_for_settings(settings)
 
     return render_template(
